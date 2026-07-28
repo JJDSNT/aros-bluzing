@@ -20,6 +20,7 @@ Ver `project.md` para o texto completo dos princípios obrigatórios, arquitetur
 - [`fase0-levantamento.md`](fase0-levantamento.md) — levantamento factual do repositório AROS real (Poseidon, class drivers, attach/detach, I/O assíncrono, libraries/devices, tasks/signals, parser HID, input.device, build system, HCDs, HIDD), com citação de arquivo/símbolo/trecho para cada achado.
 - [`fase0-propostas.md`](fase0-propostas.md) — síntese sobre o levantamento: proposta de diretórios, mapeamento da API de transporte HCI sobre primitivas reais do AROS, riscos revisados e plano de implementação em commits pequenos.
 - [`fase0-correcao-hidd.md`](fase0-correcao-hidd.md) — documento à parte sobre o papel do sistema HIDD do AROS e por que o transporte HCI Bluetooth não deve ser modelado como uma classe HIDD/BOOPSI (substitui a conclusão original de §11 do levantamento).
+- [`api-publica-propostas.md`](api-publica-propostas.md) — propostas de desenho (ainda sem decisão fechada) para a mensageria cliente ↔ Manager Task da `bluetooth.library`: split síncrono/assíncrono, sessão de cliente, eventos versionados, structs com `size`/`version`, handles opacos, e um adapter de transporte virtual como "dispositivo dummy" para testar a API antes de hardware real.
 
 Checkout de trabalho do AROS usado nessa investigação: `/home/jaime/AROS-bluetooth` (branch `feature/bluetooth-stack`, checkout próprio e separado de outros checkouts do usuário).
 

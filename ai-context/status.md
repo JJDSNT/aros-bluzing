@@ -2,6 +2,23 @@
 
 > Atualizado em: 2026-07-28
 
+## BLOQUEADO — perguntas a fazer ao Jaime antes de retomar a API pública
+
+Antes de escrever qualquer código para expandir `bluetooth.library` além de
+`BT_GetAPIVersion` (mensageria cliente ↔ Manager Task), a IA deve **fazer estas 5
+perguntas e obter resposta**, em vez de assumir uma opção sozinha. Detalhes de cada uma em
+[`api-publica-propostas.md`](api-publica-propostas.md#questões-em-aberto-para-decidirmos-antes-de-codificar).
+
+1. Sessão de cliente: `BT_ClientOpen`/`BT_ClientClose` explícito (recomendado) ou outra
+   alternativa?
+2. Posse dos `bt_event_msg`: pool fixo reciclado via `ReplyMsg` (recomendado) ou alocação
+   dinâmica?
+3. Uma única fila/`MsgPort` de comando na Manager Task para tudo (síncrono + assíncrono),
+   ou duas filas separadas?
+4. Nome e local do novo header público (ex. `bluetooth/client_api.h`)?
+5. Já reservar a flag de build "adapter = transporte virtual" agora, ou só depois do
+   `usbbluetooth.device` validado com hardware real?
+
 ## Objetivos atuais
 
 - **Fase 7 iniciada com HOGP funcional no host** (SDP Classic + ATT/GATT LE,
@@ -85,7 +102,7 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 - [ ] Segurança restante — conectar a máquina SMP ao HCI/event loop e ao `bond_store`, implementar reconexão bonded e os métodos SC Passkey/OOB; SSP Classic e link keys ainda não iniciados.
 - [ ] HID restante — ligar o adapter ao Bluetooth Manager Task do AROS, HIDP Classic, `lowlevel.library`, rumble/Feature Reports específicos e reconexão bonded no port.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
-- [ ] Expandir `bluetooth.library` além de `BT_GetAPIVersion`: controle do serviço, enumeração, discovery, conexão e pairing por mensagens à Manager Task.
+- [ ] Expandir `bluetooth.library` além de `BT_GetAPIVersion`: controle do serviço, enumeração, discovery, conexão e pairing por mensagens à Manager Task. **Propostas de desenho em avaliação** (sem decisão fechada ainda): ver [`api-publica-propostas.md`](api-publica-propostas.md) — split síncrono/assíncrono, sessão de cliente explícita (`BT_ClientOpen`/`BT_ClientClose`, já que `OpenLibrary` de uma library clássica não dá estado por chamador), eventos versionados com `MsgPort`, structs com `size`/`version`, handles opacos, e uso do transporte virtual já existente (`ports/test-host/virtual_transport`) como "dispositivo dummy" para testar a API de ponta a ponta antes de hardware real.
 - [ ] Validar o adapter `usbbluetooth.device` com controlador USB real, incluindo remoção física durante I/O pendente.
 - [ ] Fase 4 em diante: seguir `project.md` sem mudança de plano.
 
