@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -std=c11 -Wall -Wextra -Werror -Iinclude -Iports/test-host
+CFLAGS ?= -std=c11 -Wall -Wextra -Werror -Iinclude -Iports/test-host -Iprotocols
 SAN_CFLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -g
 
 CORE_SRC := core/buffer/endian.c core/buffer/buffer.c protocols/hci/hci.c \
@@ -18,6 +18,7 @@ CORE_SRC += core/hid/report_parser.c
 CORE_SRC += core/hid/input.c
 CORE_SRC += profiles/hogp/hogp_client.c
 CORE_SRC += ports/aros/input/input_bridge.c
+CORE_SRC += protocols/vendor_init/dummy/dummy_vendor_init.c
 PORT_SRC := ports/test-host/virtual_transport/virtual_transport.c
 TEST_SRC := tests/main.c tests/support/test.c tests/endian/test_endian.c \
             tests/buffer/test_buffer.c tests/hci/test_hci.c \
@@ -39,6 +40,7 @@ TEST_SRC += tests/hid/test_hid_report.c
 TEST_SRC += tests/hid/test_hid_input.c
 TEST_SRC += tests/hid/test_hogp_client.c
 TEST_SRC += tests/hid/test_aros_input_bridge.c
+TEST_SRC += tests/vendor_init/test_vendor_init.c
 
 BUILD := build
 

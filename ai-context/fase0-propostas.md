@@ -48,19 +48,27 @@ ports/aros/
 │                        #   sem depender de Poseidon diretamente
 ├── transport-usb/        # implementação de bt_hci_transport_ops sobre usbbluetooth.device
 │                        #   (opção "a" acima) — abre o device existente, sem reescrever bluetooth.class
-├── transport-sdio/       # futuro — chip combo onboard (ex. mesmo chip do bwfm no Raspberry Pi):
-│                        #   Exec Resource sobre o Resource sdio existente, ver fase0-correcao-hidd.md
-├── transport-uart/       # futuro — sem precedente de driver UART geral no AROS ainda,
-│                        #   a construir seguindo o mesmo padrão de Resource
+├── transport-uart/       # futuro — chip combo onboard via UART (ex. BCM4345/43438 do Raspberry Pi:
+│                        #   o mesmo chip do bwfm faz Wi-Fi por SDIO, mas Bluetooth por UART/PL011 —
+│                        #   são dois barramentos físicos distintos do mesmo chip, não o mesmo caminho).
+│                        #   Sem precedente de driver UART geral no AROS ainda, a construir seguindo
+│                        #   o mesmo padrão de Resource dedicado que o `bwfm` usa para SDIO.
 ├── storage/              # persistência ENVARC:Sys/bluetooth/*.db
 └── input/                 # integração com input.device via IND_WRITEEVENT
                           #   (mesmo padrão de bootkeyboard.class/bootmouse.class)
 ```
 
+**Correção de um engano anterior deste documento**: uma versão prévia listava também um
+`transport-sdio/` para "o mesmo chip do `bwfm` no Raspberry Pi", sugerindo Bluetooth via SDIO. Isso está
+errado — nenhum chip-alvo conhecido deste projeto expõe Bluetooth por SDIO. No combo Wi-Fi+Bluetooth da
+Broadcom usado no Raspberry Pi, o SDIO carrega só a metade Wi-Fi (`bwfm`); a metade Bluetooth do mesmo
+chip físico é um barramento completamente separado, o UART (PL011). Removido daqui; se algum dia
+aparecer um alvo real com Bluetooth por SDIO, tratar como caso novo, não reaproveitar esta entrada.
+
 Cada `transport-*/` implementa `bt_hci_transport_ops` para um tipo de anexação física — ver
 [`fase0-correcao-hidd.md`](fase0-correcao-hidd.md) para por que o mecanismo AROS por trás de cada um é
-diferente (library/Poseidon para USB, Exec Resource para chips onboard via SDIO, etc.) e não uma
-hierarquia HIDD/BOOPSI única.
+diferente (library/Poseidon para USB, Exec Resource dedicado para chips onboard via UART, etc.) e não
+uma hierarquia HIDD/BOOPSI única.
 
 `ports/test-host/` de `project.md` permanece igual — é onde o transporte virtual roda independente do
 AROS.
