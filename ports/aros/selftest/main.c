@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <exec/libraries.h>
+#include <aros/libcall.h>
 #include <proto/exec.h>
 
 struct selftest_sink
@@ -117,10 +118,13 @@ static bool test_bluetooth_library(void)
 {
     struct Library *library = OpenLibrary(
         (CONST_STRPTR)"bluetooth.library", 1);
+    ULONG api_version;
 
     if (library == NULL)
         return false;
-    if (library->lib_Version != 1)
+    api_version = AROS_LC0(ULONG, BT_GetAPIVersion,
+                           struct Library *, library, 5, Bluetooth);
+    if (library->lib_Version != 1 || api_version != 1)
     {
         CloseLibrary(library);
         return false;

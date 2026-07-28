@@ -103,8 +103,14 @@ MetaMake discovers the file while scanning the source tree. The regular `contrib
   generated ABI headers in the component-local `Developer/include`;
 - links the native `aros-bluzing-selftest` program; and
 - installs that self-test under `Extras:aros-bluzing/C`, keeping the global
-  `C:` namespace clean. That component-local `C` directory can be added to
-  `Path` explicitly when development commands are wanted.
+  `C:` namespace clean.
+
+The build also installs a normal AROS package registration in
+`ENVARC:SYS/Packages/aros-bluzing`. At boot, the package startup assigns
+`AROSBLUZING:` to `SYS:Extras/aros-bluzing`, adds its private `Libs` directory
+to `LIBS:`, adds its private `C` directory to `Path`, and exposes the packaged
+development files through `AROSBLUZINGSDK:`. No files need to be copied into
+the global `SYS:C` or `SYS:Libs` directories.
 
 For a focused build in an already configured and complete AROS build tree:
 
@@ -137,13 +143,16 @@ hardware or AROS build required):
 - **HID**: report descriptor parsing, normalized keyboard/mouse/consumer input, HOGP including Boot
   Protocol and output reports, plus an AROS `input.device` event adapter.
 - **AROS build validation**: native AArch64 compile/link and an image-booted QEMU self-test covering
-  byte order, HID-to-AROS event delivery, and bond storage.
+  byte order, HID-to-AROS event delivery, bond storage, the Manager process/timer, and a call through
+  the exported `bluetooth.library` API vector. The test boots with the normal AROS package
+  registration and requires no manual startup assignments.
 - **AROS USB transport**: asynchronous HCI command/ACL I/O and driver-delivered event messages over
   the existing `usbbluetooth.device`, designed to be polled by the single-owner Manager Task.
 - **Manager core**: transport lifecycle, receive dispatch, deterministic controller initialization,
   and timeout progression under one event-loop owner, tested with the virtual controller.
 - **AROS runtime package**: an Exec/timer.device Manager process and a genmodule-based
-  `bluetooth.library`, both kept under the component's own `Extras:aros-bluzing` hierarchy.
+  `bluetooth.library`, both kept under the component's own `Extras:aros-bluzing` hierarchy and
+  activated through the native AROS package mechanism.
 
 Still pending are the functional public service APIs beyond ABI versioning, HID Classic, RFCOMM,
 audio, persistent bond storage in the AROS port, and controller hardware validation. See

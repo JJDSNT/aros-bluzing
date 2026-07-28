@@ -1,0 +1,4 @@
+Assign AROSBLUZING: SYS:Extras/aros-bluzing
+Assign LIBS: AROSBLUZING:Libs ADD
+Assign AROSBLUZINGSDK: AROSBLUZING:Developer
+Path AROSBLUZING:C ADD

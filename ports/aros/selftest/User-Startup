@@ -1,4 +1,3 @@
 Echo "=== aros-bluzing selftest begin ===" >DEBUG:
-Assign LIBS: SYS:Extras/aros-bluzing/Libs ADD
 SYS:Extras/aros-bluzing/C/aros-bluzing-selftest >DEBUG:
 Echo "=== aros-bluzing selftest end ===" >DEBUG:

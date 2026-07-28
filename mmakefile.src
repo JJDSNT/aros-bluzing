@@ -10,6 +10,7 @@ include $(SRCDIR)/config/aros.cfg
 #MM- contrib-aros-bluzing : \
 #MM      linklibs-arosbluzing \
 #MM      contrib-aros-bluzing-library \
+#MM      contrib-aros-bluzing-package \
 #MM      contrib-aros-bluzing-selftest
 #MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
 
@@ -68,6 +69,18 @@ USER_CFLAGS := -Wall -Wextra -Werror
     cflags="$(CFLAGS) -Wno-missing-field-initializers -Wno-unused-parameter" \
     includedir="$(BLUZING_PACKAGE)/Developer/include" \
     moduledir="$(BLUZING_PACKAGE_DIR)/Libs"
+
+#MM- contrib-aros-bluzing-package : \
+#MM      contrib-aros-bluzing-package-startup \
+#MM      contrib-aros-bluzing-package-registration
+
+%copy_files_q mmake=contrib-aros-bluzing-package-startup \
+    src="$(BLUZING_ROOT)/ports/aros/package/S" \
+    files="Package-Startup" dst="$(BLUZING_PACKAGE)/S"
+
+%copy_files_q mmake=contrib-aros-bluzing-package-registration \
+    src="$(BLUZING_ROOT)/ports/aros/package/Packages" \
+    files="aros-bluzing" dst="$(AROS_ENVARC)/SYS/Packages"
 
 %build_prog mmake=contrib-aros-bluzing-selftest \
     progname=aros-bluzing-selftest \
