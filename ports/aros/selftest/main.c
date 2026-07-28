@@ -3,6 +3,10 @@
 #include <bluetooth/endian.h>
 #include <bluetooth/hid_input.h>
 #include <bluetooth/hid_report.h>
+#include <bluetooth/manager.h>
+
+#include "../task/manager_task.h"
+#include <virtual_transport/virtual_transport.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -85,6 +89,27 @@ static bool test_bond_store(void)
            memcmp(encoded, "BTKD", 4) == 0;
 }
 
+static bool test_manager_task(void)
+{
+    struct bt_virtual_transport transport;
+    struct bt_aros_manager_task task;
+
+    bt_virtual_transport_init(&transport);
+    bt_aros_manager_task_init(
+        &task, &transport.base, &transport, NULL, NULL);
+    if (bt_aros_manager_task_start(&task) != BT_OK)
+        return false;
+    if (task.manager.state != BT_MANAGER_STATE_RUNNING ||
+        task.manager.controller.state != BT_CONTROLLER_STATE_READY)
+    {
+        bt_aros_manager_task_stop(&task);
+        return false;
+    }
+    bt_aros_manager_task_stop(&task);
+    return task.manager.state == BT_MANAGER_STATE_STOPPED &&
+           task.task == NULL && !transport.is_open;
+}
+
 int main(void)
 {
     unsigned int passed = 0;
@@ -101,7 +126,11 @@ int main(void)
         ++passed;
     else
         printf("FAIL bond-store\n");
+    if (test_manager_task())
+        ++passed;
+    else
+        printf("FAIL manager-task\n");
 
-    printf("aros-bluzing selftest: %u/3 passed\n", passed);
-    return passed == 3 ? 0 : 20;
+    printf("aros-bluzing selftest: %u/4 passed\n", passed);
+    return passed == 4 ? 0 : 20;
 }

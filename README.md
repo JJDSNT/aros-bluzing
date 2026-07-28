@@ -100,7 +100,9 @@ MetaMake discovers the file while scanning the source tree. The regular `contrib
 
 - compiles the portable stack and AROS adapter into `libarosbluzing.a`;
 - links the native `aros-bluzing-selftest` program; and
-- installs that self-test in `C:` in the generated AROS system tree.
+- installs that self-test under `Extras:aros-bluzing/C`, keeping the global
+  `C:` namespace clean. That component-local `C` directory can be added to
+  `Path` explicitly when development commands are wanted.
 
 For a focused build in an already configured and complete AROS build tree:
 

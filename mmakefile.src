@@ -11,6 +11,7 @@ include $(SRCDIR)/config/aros.cfg
 #MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
 
 BLUZING_ROOT := $(SRCDIR)/$(CURDIR)
+BLUZING_PACKAGE := $(AROS_CONTRIB)/aros-bluzing
 
 BLUZING_FILES := \
     core/buffer/endian \
@@ -40,11 +41,14 @@ BLUZING_FILES := \
     profiles/hogp/hogp_client \
     ports/aros/input/input_bridge \
     ports/aros/input/input_device \
+    ports/aros/task/manager_task \
     ports/aros/transport-usb/usb_transport
 
 USER_INCLUDES := -I$(BLUZING_ROOT)/include \
                  -I$(BLUZING_ROOT)/ports/aros/input \
-                 -I$(BLUZING_ROOT)/ports/aros/transport-usb
+                 -I$(BLUZING_ROOT)/ports/aros/task \
+                 -I$(BLUZING_ROOT)/ports/aros/transport-usb \
+                 -I$(BLUZING_ROOT)/ports/test-host
 USER_CFLAGS := -Wall -Wextra -Werror
 
 %build_linklib mmake=linklibs-arosbluzing \
@@ -53,8 +57,9 @@ USER_CFLAGS := -Wall -Wextra -Werror
 
 %build_prog mmake=contrib-aros-bluzing-selftest \
     progname=aros-bluzing-selftest \
-    files="$(BLUZING_ROOT)/ports/aros/selftest/main" \
+    files="$(BLUZING_ROOT)/ports/aros/selftest/main \
+           $(BLUZING_ROOT)/ports/test-host/virtual_transport/virtual_transport" \
     uselibs=arosbluzing \
-    targetdir=$(AROS_C)
+    targetdir=$(BLUZING_PACKAGE)/C
 
 %common

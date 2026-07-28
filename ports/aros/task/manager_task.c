@@ -1,0 +1,178 @@
+#include "manager_task.h"
+
+#include <devices/timer.h>
+#include <dos/dostags.h>
+#include <exec/io.h>
+#include <exec/ports.h>
+#include <proto/dos.h>
+#include <proto/exec.h>
+
+#include <string.h>
+
+#define BT_AROS_MANAGER_TICK_US 10000u
+
+static uint64_t timer_now_us(struct timerequest *request)
+{
+    request->tr_node.io_Command = TR_GETSYSTIME;
+    DoIO(&request->tr_node);
+    return (uint64_t)request->tr_time.tv_secs * 1000000ull +
+           request->tr_time.tv_micro;
+}
+
+static void arm_tick(struct timerequest *request)
+{
+    request->tr_node.io_Command = TR_ADDREQUEST;
+    request->tr_node.io_Flags = 0;
+    request->tr_time.tv_secs = 0;
+    request->tr_time.tv_micro = BT_AROS_MANAGER_TICK_US;
+    SendIO(&request->tr_node);
+}
+
+static void close_timer(struct timerequest *request)
+{
+    struct MsgPort *port;
+
+    if (request == NULL)
+        return;
+    port = request->tr_node.io_Message.mn_ReplyPort;
+    if (!CheckIO(&request->tr_node))
+        AbortIO(&request->tr_node);
+    WaitIO(&request->tr_node);
+    CloseDevice(&request->tr_node);
+    DeleteIORequest(&request->tr_node);
+    DeleteMsgPort(port);
+}
+
+static struct timerequest *open_timer(void)
+{
+    struct MsgPort *port = CreateMsgPort();
+    struct timerequest *request;
+
+    if (port == NULL)
+        return NULL;
+    request = (struct timerequest *)CreateIORequest(
+        port, sizeof(struct timerequest));
+    if (request == NULL)
+    {
+        DeleteMsgPort(port);
+        return NULL;
+    }
+    if (OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ,
+                   &request->tr_node, 0) != 0)
+    {
+        DeleteIORequest(&request->tr_node);
+        DeleteMsgPort(port);
+        return NULL;
+    }
+    return request;
+}
+
+static void manager_process(void)
+{
+    struct Task *self = FindTask(NULL);
+    struct bt_aros_manager_task *task = self->tc_UserData;
+    struct timerequest *timer = open_timer();
+    uint32_t timer_mask = 0;
+
+    task->task = self;
+    if (timer == NULL)
+        task->startup_status = BT_ERR_NO_RESOURCES;
+    else
+    {
+        timer_mask =
+            (uint32_t)1u << timer->tr_node.io_Message.mn_ReplyPort->mp_SigBit;
+        bt_manager_init(&task->manager, task->transport);
+        task->startup_status =
+            bt_manager_start(&task->manager, timer_now_us(timer));
+    }
+    if (task->startup_status != BT_OK)
+    {
+        close_timer(timer);
+        task->task = NULL;
+        Signal(task->creator, SIGF_SINGLE);
+        return;
+    }
+
+    Signal(task->creator, SIGF_SINGLE);
+    {
+        bool running = true;
+
+        arm_tick(timer);
+        while (running)
+        {
+            uint32_t transport_mask =
+                task->signal_mask != NULL
+                    ? task->signal_mask(task->transport_context)
+                    : 0;
+            uint32_t signals =
+                Wait(SIGBREAKF_CTRL_C | timer_mask | transport_mask);
+
+            if ((signals & transport_mask) != 0 && task->poll != NULL &&
+                task->poll(task->transport_context) != BT_OK)
+                task->manager.state = BT_MANAGER_STATE_ERROR;
+            if ((signals & timer_mask) != 0)
+            {
+                WaitIO(&timer->tr_node);
+                bt_manager_tick(&task->manager, timer_now_us(timer));
+                arm_tick(timer);
+            }
+            if ((signals & SIGBREAKF_CTRL_C) != 0 ||
+                task->manager.state == BT_MANAGER_STATE_ERROR)
+                running = false;
+        }
+        bt_manager_stop(&task->manager);
+    }
+
+    close_timer(timer);
+    task->task = NULL;
+    Signal(task->creator, SIGF_SINGLE);
+}
+
+void bt_aros_manager_task_init(
+    struct bt_aros_manager_task *task,
+    struct bt_hci_transport *transport,
+    void *transport_context,
+    bt_aros_signal_mask_fn signal_mask,
+    bt_aros_poll_fn poll)
+{
+    if (task == NULL)
+        return;
+    memset(task, 0, sizeof(*task));
+    task->transport = transport;
+    task->transport_context = transport_context;
+    task->signal_mask = signal_mask;
+    task->poll = poll;
+    task->startup_status = BT_ERR_INVALID_ARGUMENT;
+}
+
+bt_status_t bt_aros_manager_task_start(struct bt_aros_manager_task *task)
+{
+    struct Process *process;
+
+    if (task == NULL || task->transport == NULL || task->task != NULL)
+        return BT_ERR_INVALID_ARGUMENT;
+    task->creator = FindTask(NULL);
+    SetSignal(0, SIGF_SINGLE);
+    Forbid();
+    process = CreateNewProcTags(
+        NP_Entry, (IPTR)manager_process,
+        NP_Name, (IPTR)"Bluetooth Manager",
+        NP_Priority, 1,
+        TAG_DONE);
+    if (process != NULL)
+        process->pr_Task.tc_UserData = task;
+    Permit();
+    if (process == NULL)
+        return BT_ERR_NO_RESOURCES;
+    Wait(SIGF_SINGLE);
+    return task->startup_status;
+}
+
+void bt_aros_manager_task_stop(struct bt_aros_manager_task *task)
+{
+    if (task == NULL || task->task == NULL)
+        return;
+    SetSignal(0, SIGF_SINGLE);
+    Signal(task->task, SIGBREAKF_CTRL_C);
+    Wait(SIGF_SINGLE);
+}
