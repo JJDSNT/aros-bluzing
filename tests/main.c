@@ -13,6 +13,7 @@
 #include "l2cap/test_l2cap.h"
 #include "l2cap/test_signaling.h"
 #include "l2cap/test_channel.h"
+#include "sdp/test_sdp.h"
 
 #include <stdio.h>
 
@@ -32,6 +33,7 @@ int main(void)
     run_l2cap_tests();
     run_l2cap_signaling_tests();
     run_l2cap_channel_tests();
+    run_sdp_tests();
 
     printf("%d/%d checks passed\n", bt_test_count - bt_test_failures, bt_test_count);
 
