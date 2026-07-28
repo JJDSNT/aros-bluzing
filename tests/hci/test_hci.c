@@ -201,6 +201,108 @@ static void test_parse_buffer_size(void)
     BT_CHECK(bt_hci_parse_buffer_size(rp, sizeof(rp) - 1, &bs) == BT_ERR_INVALID_ARGUMENT);
 }
 
+static void test_encode_inquiry(void)
+{
+    uint8_t buf[16];
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_inquiry(&w, BT_HCI_GIAC_LAP, 0x08, 0x00) == BT_OK);
+
+    /* opcode LE (0x01,0x04 -> OGF 1, OCF 1), length 5, LAP LE (0x33,0x8B,0x9E),
+     * inquiry_length, num_responses. */
+    BT_CHECK(bt_buf_writer_len(&w) == 3 + 5);
+    BT_CHECK(buf[0] == 0x01 && buf[1] == 0x04 && buf[2] == 0x05);
+    BT_CHECK(buf[3] == 0x33 && buf[4] == 0x8B && buf[5] == 0x9E);
+    BT_CHECK(buf[6] == 0x08 && buf[7] == 0x00);
+}
+
+static void test_inquiry_result_iter(void)
+{
+    /* num_responses=2, then two 14-byte entries. */
+    static const uint8_t wire[] = {
+        0x02,
+        /* entry 1: addr AA:BB:CC:DD:EE:01, pscan_rep=0x01, reserved=0000,
+         * class_of_device LE 0x123456, clock_offset LE 0x1122 */
+        0x01, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x01, 0x00, 0x00, 0x56, 0x34, 0x12, 0x22, 0x11,
+        /* entry 2: addr AA:BB:CC:DD:EE:02, pscan_rep=0x00, reserved=0000,
+         * class_of_device LE 0x000000, clock_offset LE 0x0000 */
+        0x02, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    struct bt_hci_inquiry_result_iter it;
+    struct bt_hci_inquiry_result_entry entry;
+
+    BT_CHECK(bt_hci_inquiry_result_iter_init(&it, wire, sizeof(wire)) == BT_OK);
+
+    BT_CHECK(bt_hci_inquiry_result_iter_next(&it, &entry) == BT_OK);
+    BT_CHECK(entry.bd_addr.b[0] == 0x01 && entry.bd_addr.b[5] == 0xAA);
+    BT_CHECK(entry.page_scan_repetition_mode == 0x01);
+    BT_CHECK(entry.class_of_device == 0x123456);
+    BT_CHECK(entry.clock_offset == 0x1122);
+
+    BT_CHECK(bt_hci_inquiry_result_iter_next(&it, &entry) == BT_OK);
+    BT_CHECK(entry.bd_addr.b[0] == 0x02);
+    BT_CHECK(entry.class_of_device == 0x000000);
+
+    BT_CHECK(bt_hci_inquiry_result_iter_next(&it, &entry) == BT_ERR_BUFFER_UNDERFLOW);
+}
+
+static void test_encode_le_scan(void)
+{
+    uint8_t buf[16];
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_set_scan_parameters(&w, 0x01, 0x0010, 0x0010, 0x00, 0x00) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 3 + 7);
+    BT_CHECK(buf[0] == 0x0B && buf[1] == 0x20); /* opcode LE for OGF 0x08, OCF 0x000B */
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_set_scan_enable(&w, 0x01, 0x00) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 3 + 2);
+    BT_CHECK(buf[0] == 0x0C && buf[1] == 0x20);
+    BT_CHECK(buf[3] == 0x01 && buf[4] == 0x00);
+}
+
+static void test_le_adv_report_iter(void)
+{
+    static const uint8_t wire[] = {
+        BT_HCI_LE_META_SUBEVENT_ADVERTISING_REPORT,
+        0x02, /* num_reports */
+        /* report 1: event_type=0x00, addr_type=0x00, addr ..01, data_len=2, data={0xAA,0xBB}, rssi=-40 */
+        0x00, 0x00, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x01, 0x02, 0xAA, 0xBB, (uint8_t)-40,
+        /* report 2: event_type=0x04, addr_type=0x01, addr ..02, data_len=0, rssi=-70 */
+        0x04, 0x01, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x02, 0x00, (uint8_t)-70,
+    };
+    struct bt_hci_le_adv_report_iter it;
+    struct bt_hci_le_adv_report report;
+
+    BT_CHECK(bt_hci_le_adv_report_iter_init(&it, wire, sizeof(wire)) == BT_OK);
+
+    BT_CHECK(bt_hci_le_adv_report_iter_next(&it, &report) == BT_OK);
+    BT_CHECK(report.event_type == 0x00);
+    BT_CHECK(report.address_type == 0x00);
+    BT_CHECK(report.address.b[0] == 0xEE && report.address.b[5] == 0x01);
+    BT_CHECK(report.data_len == 2);
+    BT_CHECK(report.data[0] == 0xAA && report.data[1] == 0xBB);
+    BT_CHECK(report.rssi == -40);
+
+    BT_CHECK(bt_hci_le_adv_report_iter_next(&it, &report) == BT_OK);
+    BT_CHECK(report.event_type == 0x04);
+    BT_CHECK(report.data_len == 0);
+    BT_CHECK(report.rssi == -70);
+
+    BT_CHECK(bt_hci_le_adv_report_iter_next(&it, &report) == BT_ERR_BUFFER_UNDERFLOW);
+}
+
+static void test_le_adv_report_iter_rejects_wrong_subevent(void)
+{
+    static const uint8_t wire[] = {0x01, 0x00}; /* not an advertising report */
+    struct bt_hci_le_adv_report_iter it;
+
+    BT_CHECK(bt_hci_le_adv_report_iter_init(&it, wire, sizeof(wire)) == BT_ERR_INVALID_ARGUMENT);
+}
+
 void run_hci_tests(void)
 {
     test_opcode_packing();
@@ -217,4 +319,9 @@ void run_hci_tests(void)
     test_parse_local_version();
     test_parse_local_features();
     test_parse_buffer_size();
+    test_encode_inquiry();
+    test_inquiry_result_iter();
+    test_encode_le_scan();
+    test_le_adv_report_iter();
+    test_le_adv_report_iter_rejects_wrong_subevent();
 }

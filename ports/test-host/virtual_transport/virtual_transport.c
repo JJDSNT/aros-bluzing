@@ -24,6 +24,13 @@ static void vt_close(struct bt_hci_transport *transport)
     vt_of(transport)->is_open = false;
 }
 
+static void emit_event(struct bt_hci_transport *transport, struct bt_virtual_transport *vt,
+                        const uint8_t *event, size_t event_len)
+{
+    if (vt->recv != NULL)
+        vt->recv(transport, BT_HCI_PACKET_EVENT, event, event_len, vt->recv_user_data);
+}
+
 /* Emits a Command Complete event: num_hci_command_packets=1, the given
  * opcode, and whatever return_params the caller already built (status
  * byte included, since its position/meaning varies per command). */
@@ -41,8 +48,75 @@ static void emit_command_complete(struct bt_hci_transport *transport, struct bt_
     bt_buf_writer_write_le16(&w, opcode);
     bt_buf_writer_write_bytes(&w, return_params, return_params_len);
 
-    if (vt->recv != NULL)
-        vt->recv(transport, BT_HCI_PACKET_EVENT, event, bt_buf_writer_len(&w), vt->recv_user_data);
+    emit_event(transport, vt, event, bt_buf_writer_len(&w));
+}
+
+/* Emits a Command Status event: some commands (Inquiry, LE scan enable in
+ * spirit though it actually completes) only ack this way. */
+static void emit_command_status(struct bt_hci_transport *transport, struct bt_virtual_transport *vt,
+                                 uint16_t opcode, uint8_t status)
+{
+    uint8_t event[BT_HCI_EVENT_HEADER_LEN + 4];
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, event, sizeof(event));
+    bt_buf_writer_write_u8(&w, BT_HCI_EVENT_COMMAND_STATUS);
+    bt_buf_writer_write_u8(&w, 4);
+    bt_buf_writer_write_u8(&w, status);
+    bt_buf_writer_write_u8(&w, 1); /* num_hci_command_packets */
+    bt_buf_writer_write_le16(&w, opcode);
+
+    emit_event(transport, vt, event, bt_buf_writer_len(&w));
+}
+
+/* Simulates one Classic inquiry finding a single fake device, then
+ * finishing -- Inquiry Result followed by Inquiry Complete. */
+static void emit_fake_inquiry_sequence(struct bt_hci_transport *transport,
+                                        struct bt_virtual_transport *vt)
+{
+    static const uint8_t fake_addr[BT_ADDR_LEN] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+    uint8_t result[BT_HCI_EVENT_HEADER_LEN + 1 + 14];
+    uint8_t complete[BT_HCI_EVENT_HEADER_LEN + 1];
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, result, sizeof(result));
+    bt_buf_writer_write_u8(&w, BT_HCI_EVENT_INQUIRY_RESULT);
+    bt_buf_writer_write_u8(&w, 1 + 14); /* num_responses(1) + one 14-byte entry */
+    bt_buf_writer_write_u8(&w, 1);      /* num_responses */
+    bt_buf_writer_write_bytes(&w, fake_addr, BT_ADDR_LEN);
+    bt_buf_writer_write_u8(&w, 0x01);       /* page_scan_repetition_mode */
+    bt_buf_writer_write_le16(&w, 0x0000);   /* reserved */
+    bt_buf_writer_write_le24(&w, 0x1F0104); /* fake class of device */
+    bt_buf_writer_write_le16(&w, 0x0000);   /* clock_offset */
+    emit_event(transport, vt, result, bt_buf_writer_len(&w));
+
+    bt_buf_writer_init(&w, complete, sizeof(complete));
+    bt_buf_writer_write_u8(&w, BT_HCI_EVENT_INQUIRY_COMPLETE);
+    bt_buf_writer_write_u8(&w, 1);
+    bt_buf_writer_write_u8(&w, 0x00); /* status: success */
+    emit_event(transport, vt, complete, bt_buf_writer_len(&w));
+}
+
+/* Simulates one LE advertising report from a fake device. */
+static void emit_fake_le_adv_report(struct bt_hci_transport *transport,
+                                     struct bt_virtual_transport *vt)
+{
+    static const uint8_t fake_addr[BT_ADDR_LEN] = {0x11, 0x12, 0x13, 0x14, 0x15, 0x16};
+    uint8_t event[BT_HCI_EVENT_HEADER_LEN + 2 + 10]; /* subevent+num_reports + one 0-data report */
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, event, sizeof(event));
+    bt_buf_writer_write_u8(&w, BT_HCI_EVENT_LE_META);
+    bt_buf_writer_write_u8(&w, 2 + 10);
+    bt_buf_writer_write_u8(&w, BT_HCI_LE_META_SUBEVENT_ADVERTISING_REPORT);
+    bt_buf_writer_write_u8(&w, 1); /* num_reports */
+    bt_buf_writer_write_u8(&w, 0x00); /* event_type: ADV_IND */
+    bt_buf_writer_write_u8(&w, 0x00); /* address_type: public */
+    bt_buf_writer_write_bytes(&w, fake_addr, BT_ADDR_LEN);
+    bt_buf_writer_write_u8(&w, 0x00);          /* data_len */
+    bt_buf_writer_write_u8(&w, (uint8_t)-55);  /* rssi */
+
+    emit_event(transport, vt, event, bt_buf_writer_len(&w));
 }
 
 static int vt_send_command(struct bt_hci_transport *transport, const uint8_t *data, size_t length)
@@ -98,6 +172,23 @@ static int vt_send_command(struct bt_hci_transport *transport, const uint8_t *da
         bt_buf_writer_write_le16(&rpw, 8);       /* total_num_acl_data_packets */
         bt_buf_writer_write_le16(&rpw, 0);       /* total_num_sco_data_packets */
         break;
+
+    case BT_HCI_OPCODE_INQUIRY:
+        /* Real Inquiry only ever acks via Command Status, then results
+         * stream in asynchronously -- no Command Complete for this one. */
+        emit_command_status(transport, vt, opcode, 0x00);
+        emit_fake_inquiry_sequence(transport, vt);
+        return 0;
+
+    case BT_HCI_OPCODE_LE_SET_SCAN_PARAMETERS:
+        bt_buf_writer_write_u8(&rpw, 0x00); /* status */
+        break;
+
+    case BT_HCI_OPCODE_LE_SET_SCAN_ENABLE:
+        bt_buf_writer_write_u8(&rpw, 0x00); /* status */
+        emit_command_complete(transport, vt, opcode, rp, (uint8_t)bt_buf_writer_len(&rpw));
+        emit_fake_le_adv_report(transport, vt);
+        return 0;
 
     default:
         return 0; /* not modeled yet: silently accepted, no event generated */

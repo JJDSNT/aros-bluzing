@@ -2,6 +2,7 @@
 #define BLUETOOTH_CONTROLLER_H
 
 #include <bluetooth/command_queue.h>
+#include <bluetooth/device_registry.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/status.h>
 #include <bluetooth/timer.h>
@@ -49,6 +50,7 @@ struct bt_controller
     struct bt_cmdq cmdq;
     enum bt_controller_state state;
     struct bt_controller_info info;
+    struct bt_device_registry devices; /* Fase 4: unified Classic/LE discovery results */
 };
 
 void bt_controller_init(struct bt_controller *ctrl, struct bt_hci_transport *transport);
@@ -65,5 +67,21 @@ void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, siz
  * so a stalled bring-up command can time out and move to
  * BT_CONTROLLER_STATE_ERROR instead of hanging forever. */
 void bt_controller_tick(struct bt_controller *ctrl, uint64_t now_us);
+
+/*
+ * Discovery (Fase 4). Both require BT_CONTROLLER_STATE_READY. Results
+ * accumulate in ctrl->devices as Inquiry Result / LE Advertising Report
+ * events arrive via bt_controller_on_event() -- there's no separate
+ * "discovery complete" callback here yet; poll bt_device_registry_count()
+ * or read ctrl->devices directly.
+ */
+
+/* inquiry_length is in 1.28s units (project.md / HCI spec unit). */
+bt_status_t bt_controller_start_classic_inquiry(struct bt_controller *ctrl, uint8_t inquiry_length,
+                                                 uint64_t now_us);
+
+/* Uses reasonable default scan parameters (passive, 10ms interval/window,
+ * public own address, no filter, duplicate filtering on). */
+bt_status_t bt_controller_start_le_scan(struct bt_controller *ctrl, uint64_t now_us);
 
 #endif /* BLUETOOTH_CONTROLLER_H */

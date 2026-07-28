@@ -7,6 +7,9 @@
 #include "timer/test_timer.h"
 #include "controller/test_command_queue.h"
 #include "controller/test_controller.h"
+#include "addr/test_addr.h"
+#include "device/test_device_registry.h"
+#include "discovery/test_discovery.h"
 
 #include <stdio.h>
 
@@ -20,6 +23,9 @@ int main(void)
     run_timer_tests();
     run_command_queue_tests();
     run_controller_tests();
+    run_addr_tests();
+    run_device_registry_tests();
+    run_discovery_tests();
 
     printf("%d/%d checks passed\n", bt_test_count - bt_test_failures, bt_test_count);
 

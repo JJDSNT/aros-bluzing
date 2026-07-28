@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- **Fase 2 (HCI mínimo) está completa** para o escopo de bring-up: command complete/status, ACL header, controle de créditos, fila de comandos, timeout, estado do controlador, sequência determinística Reset→Version→Features→BufferSize→Ready. Próximo passo natural: L2CAP (Fase 5) ou aprofundar Fase 2 com discovery (Fase 4) — a decidir com o usuário.
+- **Fase 4 (discovery Classic e LE) está completa** no escopo portátil/testável em host: Inquiry, Inquiry Result/Complete, LE Set Scan Parameters/Enable, LE Advertising Report, banco unificado de dispositivos com dedup e detecção de dual-mode por endereço. Próximo passo natural: Fase 5 (L2CAP) ou finalmente montar a Bluetooth Manager Task/`bt_platform_ops` para começar a tocar AROS de verdade — a decidir.
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -36,8 +36,15 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
   - Transporte virtual estendido para responder às 3 novas leituras com dados plausíveis.
   - **Bug real #1 (reentrância)**: como o transporte virtual responde de forma síncrona (dentro da própria chamada `send_command`), a fila de comandos precisava marcar o comando como outstanding *antes* de chamar o transporte, não depois — senão o processamento recursivo da resposta era sobrescrito pelo código que rodava após a chamada retornar. Corrigido em `command_queue.c`; documentado no código porque qualquer transporte síncrono real teria o mesmo risco.
   - **Bug real #2 (deadlock)**: Command Status com sucesso (status=0x00) estava deixando o slot "outstanding" indefinidamente, assumindo que um Command Complete futuro o liberaria. Mas comandos como HCI Inquiry (e Create Connection) só respondem via Command Status — nunca via Command Complete para esse opcode — e completam de verdade por um evento totalmente diferente (Inquiry Complete). Isso travaria a fila permanentemente na primeira vez que um comando desse tipo fosse usado. Corrigido: Command Status sempre libera o slot, sucesso ou falha — é apenas o "ack" de crédito do controlador, não a conclusão semântica da operação.
-- Testes: 451 checks (endian, buffer, HCI encode/parse incl. novos parsers, transporte virtual, fila, timers, command queue com créditos/timeout/comandos simultâneos, sequência completa de inicialização do controlador), `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Fase 4 (discovery Classic/LE) e Fase 5 (L2CAP) — próximos passos possíveis, ainda não iniciados.
+- [x] **Fase 4 (discovery)**:
+  - `bluetooth/addr.h` + `core/addr/addr.c`: `struct bt_addr` explícito (nunca cast para inteiro nativo), `bt_addr_equal`.
+  - `bluetooth/device_registry.h` + `core/device/device_registry.c`: banco unificado de dispositivos, tamanho fixo (`BT_DEVICE_REGISTRY_MAX`), dedup por endereço, detecção de dual-mode (flags Classic/LE no mesmo registro). Limitação conhecida documentada: não resolve identidade de endereços LE privados/rotativos (precisa de IRK/bonding via SMP, fora de escopo aqui).
+  - `bluetooth/hci.h`: Inquiry (encode + iterator de Inquiry Result), LE Set Scan Parameters/Enable (encode), LE Advertising Report (iterator sobre LE Meta Event).
+  - `bt_controller` estendido: `bt_controller_start_classic_inquiry`/`start_le_scan`, roteamento de Inquiry Result/LE Meta para o `device_registry`.
+  - Transporte virtual estendido para simular um dispositivo Classic (via Command Status + Inquiry Result + Inquiry Complete) e um dispositivo LE (via Command Complete + LE Advertising Report).
+  - **Bug real #3 (deadlock, achado antes mesmo do código de discovery)**: Command Status com sucesso estava deixando o slot da fila de comandos preso para sempre — exatamente o caso de Inquiry, que só responde via Command Status. Corrigido em commit separado antes de escrever qualquer código de discovery, evitando que o bug se manifestasse silenciosamente.
+- Testes: 575 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Fase 5 (L2CAP) — próximo passo possível, ainda não iniciado.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).

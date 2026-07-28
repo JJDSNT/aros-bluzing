@@ -221,3 +221,178 @@ bt_status_t bt_hci_parse_buffer_size(const uint8_t *return_params, size_t return
         return st;
     return bt_buf_reader_read_le16(&r, &out->total_num_sco_data_packets);
 }
+
+bt_status_t bt_hci_encode_inquiry(struct bt_buf_writer *w, uint32_t lap, uint8_t inquiry_length,
+                                   uint8_t num_responses)
+{
+    uint8_t params[5];
+    struct bt_buf_writer pw;
+    bt_status_t st;
+
+    bt_buf_writer_init(&pw, params, sizeof(params));
+    st = bt_buf_writer_write_le24(&pw, lap);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_u8(&pw, inquiry_length);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_u8(&pw, num_responses);
+    if (st != BT_OK)
+        return st;
+
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_INQUIRY, params, bt_buf_writer_len(&pw));
+}
+
+bt_status_t bt_hci_inquiry_result_iter_init(struct bt_hci_inquiry_result_iter *it,
+                                             const uint8_t *event_params, size_t event_params_len)
+{
+    uint8_t num_responses;
+    bt_status_t st;
+
+    bt_buf_reader_init(&it->r, event_params, event_params_len);
+    st = bt_buf_reader_read_u8(&it->r, &num_responses);
+    if (st != BT_OK)
+        return st;
+
+    it->remaining = num_responses;
+    return BT_OK;
+}
+
+bt_status_t bt_hci_inquiry_result_iter_next(struct bt_hci_inquiry_result_iter *it,
+                                             struct bt_hci_inquiry_result_entry *out)
+{
+    uint16_t reserved;
+    bt_status_t st;
+
+    if (it->remaining == 0)
+        return BT_ERR_BUFFER_UNDERFLOW;
+
+    st = bt_buf_reader_read_bytes(&it->r, out->bd_addr.b, BT_ADDR_LEN);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_u8(&it->r, &out->page_scan_repetition_mode);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_le16(&it->r, &reserved); /* Reserved field, per spec */
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_le24(&it->r, &out->class_of_device);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_le16(&it->r, &out->clock_offset);
+    if (st != BT_OK)
+        return st;
+
+    it->remaining--;
+    return BT_OK;
+}
+
+bt_status_t bt_hci_encode_le_set_scan_parameters(struct bt_buf_writer *w, uint8_t scan_type,
+                                                  uint16_t scan_interval, uint16_t scan_window,
+                                                  uint8_t own_address_type,
+                                                  uint8_t scanning_filter_policy)
+{
+    uint8_t params[7];
+    struct bt_buf_writer pw;
+    bt_status_t st;
+
+    bt_buf_writer_init(&pw, params, sizeof(params));
+    st = bt_buf_writer_write_u8(&pw, scan_type);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_le16(&pw, scan_interval);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_le16(&pw, scan_window);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_u8(&pw, own_address_type);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_u8(&pw, scanning_filter_policy);
+    if (st != BT_OK)
+        return st;
+
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_LE_SET_SCAN_PARAMETERS, params,
+                                  bt_buf_writer_len(&pw));
+}
+
+bt_status_t bt_hci_encode_le_set_scan_enable(struct bt_buf_writer *w, uint8_t scan_enable,
+                                              uint8_t filter_duplicates)
+{
+    uint8_t params[2];
+    struct bt_buf_writer pw;
+    bt_status_t st;
+
+    bt_buf_writer_init(&pw, params, sizeof(params));
+    st = bt_buf_writer_write_u8(&pw, scan_enable);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_writer_write_u8(&pw, filter_duplicates);
+    if (st != BT_OK)
+        return st;
+
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_LE_SET_SCAN_ENABLE, params,
+                                  bt_buf_writer_len(&pw));
+}
+
+bt_status_t bt_hci_le_adv_report_iter_init(struct bt_hci_le_adv_report_iter *it,
+                                            const uint8_t *event_params, size_t event_params_len)
+{
+    uint8_t subevent_code;
+    uint8_t num_reports;
+    bt_status_t st;
+
+    bt_buf_reader_init(&it->r, event_params, event_params_len);
+
+    st = bt_buf_reader_read_u8(&it->r, &subevent_code);
+    if (st != BT_OK)
+        return st;
+    if (subevent_code != BT_HCI_LE_META_SUBEVENT_ADVERTISING_REPORT)
+        return BT_ERR_INVALID_ARGUMENT;
+
+    st = bt_buf_reader_read_u8(&it->r, &num_reports);
+    if (st != BT_OK)
+        return st;
+
+    it->remaining = num_reports;
+    return BT_OK;
+}
+
+bt_status_t bt_hci_le_adv_report_iter_next(struct bt_hci_le_adv_report_iter *it,
+                                            struct bt_hci_le_adv_report *out)
+{
+    uint8_t rssi_raw;
+    bt_status_t st;
+
+    if (it->remaining == 0)
+        return BT_ERR_BUFFER_UNDERFLOW;
+
+    st = bt_buf_reader_read_u8(&it->r, &out->event_type);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_u8(&it->r, &out->address_type);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_bytes(&it->r, out->address.b, BT_ADDR_LEN);
+    if (st != BT_OK)
+        return st;
+    st = bt_buf_reader_read_u8(&it->r, &out->data_len);
+    if (st != BT_OK)
+        return st;
+
+    out->data = bt_buf_reader_peek(&it->r, out->data_len);
+    if (out->data == NULL)
+        return BT_ERR_BUFFER_UNDERFLOW;
+    st = bt_buf_reader_skip(&it->r, out->data_len);
+    if (st != BT_OK)
+        return st;
+
+    st = bt_buf_reader_read_u8(&it->r, &rssi_raw);
+    if (st != BT_OK)
+        return st;
+    out->rssi = (int8_t)rssi_raw; /* RSSI is a signed byte per spec */
+
+    it->remaining--;
+    return BT_OK;
+}

@@ -1,6 +1,7 @@
 #ifndef BLUETOOTH_HCI_H
 #define BLUETOOTH_HCI_H
 
+#include <bluetooth/addr.h>
 #include <bluetooth/buffer.h>
 #include <bluetooth/status.h>
 #include <bluetooth/types.h>
@@ -11,6 +12,19 @@
 #define BT_HCI_OGF_CONTROLLER_BASEBAND 0x03u
 #define BT_HCI_OCF_RESET 0x0003u
 #define BT_HCI_OPCODE_RESET BT_HCI_OPCODE(BT_HCI_OGF_CONTROLLER_BASEBAND, BT_HCI_OCF_RESET)
+
+#define BT_HCI_OGF_LINK_CONTROL 0x01u
+#define BT_HCI_OCF_INQUIRY 0x0001u
+#define BT_HCI_OPCODE_INQUIRY BT_HCI_OPCODE(BT_HCI_OGF_LINK_CONTROL, BT_HCI_OCF_INQUIRY)
+#define BT_HCI_GIAC_LAP 0x9E8B33u /* General Inquiry Access Code */
+
+#define BT_HCI_OGF_LE_CONTROLLER 0x08u
+#define BT_HCI_OCF_LE_SET_SCAN_PARAMETERS 0x000Bu
+#define BT_HCI_OCF_LE_SET_SCAN_ENABLE 0x000Cu
+#define BT_HCI_OPCODE_LE_SET_SCAN_PARAMETERS \
+    BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_SET_SCAN_PARAMETERS)
+#define BT_HCI_OPCODE_LE_SET_SCAN_ENABLE \
+    BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_SET_SCAN_ENABLE)
 
 #define BT_HCI_OGF_INFORMATIONAL 0x04u
 #define BT_HCI_OCF_READ_LOCAL_VERSION_INFO 0x0001u
@@ -23,8 +37,13 @@
 #define BT_HCI_OPCODE_READ_BUFFER_SIZE \
     BT_HCI_OPCODE(BT_HCI_OGF_INFORMATIONAL, BT_HCI_OCF_READ_BUFFER_SIZE)
 
+#define BT_HCI_EVENT_INQUIRY_COMPLETE 0x01u
+#define BT_HCI_EVENT_INQUIRY_RESULT 0x02u
 #define BT_HCI_EVENT_COMMAND_COMPLETE 0x0Eu
 #define BT_HCI_EVENT_COMMAND_STATUS 0x0Fu
+#define BT_HCI_EVENT_LE_META 0x3Eu
+
+#define BT_HCI_LE_META_SUBEVENT_ADVERTISING_REPORT 0x02u
 
 #define BT_HCI_COMMAND_HEADER_LEN 3 /* opcode(2) + parameter length(1) */
 #define BT_HCI_EVENT_HEADER_LEN 2   /* event code(1) + parameter length(1) */
@@ -124,5 +143,70 @@ struct bt_hci_buffer_size
 
 bt_status_t bt_hci_parse_buffer_size(const uint8_t *return_params, size_t return_params_len,
                                       struct bt_hci_buffer_size *out);
+
+/*
+ * Discovery (project.md, Fase 4). Inquiry and LE scanning stream results
+ * back as a variable number of entries packed into a single event, so
+ * these are read with a small stateful iterator instead of a one-shot
+ * parse -- init once per event, then call *_next() until it reports
+ * BT_ERR_BUFFER_UNDERFLOW (meaning "no more entries", not a real error).
+ */
+
+/* num_responses of 0 means "unlimited" (subject to inquiry_length). */
+bt_status_t bt_hci_encode_inquiry(struct bt_buf_writer *w, uint32_t lap, uint8_t inquiry_length,
+                                   uint8_t num_responses);
+
+struct bt_hci_inquiry_result_entry
+{
+    struct bt_addr bd_addr;
+    uint8_t page_scan_repetition_mode;
+    uint32_t class_of_device; /* low 24 bits meaningful */
+    uint16_t clock_offset;
+};
+
+struct bt_hci_inquiry_result_iter
+{
+    struct bt_buf_reader r;
+    uint8_t remaining;
+};
+
+/* event_params is an Inquiry Result event's parameters (after the 2-byte
+ * event header), i.e. bt_hci_event_header.param_len bytes starting right
+ * after event_code+param_len. */
+bt_status_t bt_hci_inquiry_result_iter_init(struct bt_hci_inquiry_result_iter *it,
+                                             const uint8_t *event_params, size_t event_params_len);
+bt_status_t bt_hci_inquiry_result_iter_next(struct bt_hci_inquiry_result_iter *it,
+                                             struct bt_hci_inquiry_result_entry *out);
+
+bt_status_t bt_hci_encode_le_set_scan_parameters(struct bt_buf_writer *w, uint8_t scan_type,
+                                                  uint16_t scan_interval, uint16_t scan_window,
+                                                  uint8_t own_address_type,
+                                                  uint8_t scanning_filter_policy);
+bt_status_t bt_hci_encode_le_set_scan_enable(struct bt_buf_writer *w, uint8_t scan_enable,
+                                              uint8_t filter_duplicates);
+
+struct bt_hci_le_adv_report
+{
+    uint8_t event_type;
+    uint8_t address_type;
+    struct bt_addr address;
+    uint8_t data_len;
+    const uint8_t *data; /* points into the event buffer passed to iter_init */
+    int8_t rssi;
+};
+
+struct bt_hci_le_adv_report_iter
+{
+    struct bt_buf_reader r;
+    uint8_t remaining;
+};
+
+/* event_params is a full LE Meta Event's parameters, i.e. starting with
+ * the Subevent_Code byte. Returns BT_ERR_INVALID_ARGUMENT if the subevent
+ * isn't an advertising report. */
+bt_status_t bt_hci_le_adv_report_iter_init(struct bt_hci_le_adv_report_iter *it,
+                                            const uint8_t *event_params, size_t event_params_len);
+bt_status_t bt_hci_le_adv_report_iter_next(struct bt_hci_le_adv_report_iter *it,
+                                            struct bt_hci_le_adv_report *out);
 
 #endif /* BLUETOOTH_HCI_H */
