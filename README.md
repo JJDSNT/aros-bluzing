@@ -99,6 +99,8 @@ MetaMake discovers the file while scanning the source tree. The regular `contrib
 `contrib-aros-bluzing` target, which:
 
 - compiles the portable stack and AROS adapter into `libarosbluzing.a`;
+- builds `bluetooth.library` under `Extras:aros-bluzing/Libs`, with its
+  generated ABI headers in the component-local `Developer/include`;
 - links the native `aros-bluzing-selftest` program; and
 - installs that self-test under `Extras:aros-bluzing/C`, keeping the global
   `C:` namespace clean. That component-local `C` directory can be added to
@@ -140,8 +142,10 @@ hardware or AROS build required):
   the existing `usbbluetooth.device`, designed to be polled by the single-owner Manager Task.
 - **Manager core**: transport lifecycle, receive dispatch, deterministic controller initialization,
   and timeout progression under one event-loop owner, tested with the virtual controller.
+- **AROS runtime package**: an Exec/timer.device Manager process and a genmodule-based
+  `bluetooth.library`, both kept under the component's own `Extras:aros-bluzing` hierarchy.
 
-Still pending are the AROS Exec `Wait()`/timer wrapper around the Manager core, HID Classic, RFCOMM,
+Still pending are the functional public service APIs beyond ABI versioning, HID Classic, RFCOMM,
 audio, persistent bond storage in the AROS port, and controller hardware validation. See
 [`ai-context/status.md`](ai-context/status.md) for the live, detailed tracker (in Portuguese).
 

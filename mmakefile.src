@@ -7,11 +7,15 @@
 include $(SRCDIR)/config/aros.cfg
 
 #MM- contrib : contrib-aros-bluzing
-#MM- contrib-aros-bluzing : linklibs-arosbluzing contrib-aros-bluzing-selftest
+#MM- contrib-aros-bluzing : \
+#MM      linklibs-arosbluzing \
+#MM      contrib-aros-bluzing-library \
+#MM      contrib-aros-bluzing-selftest
 #MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
 
 BLUZING_ROOT := $(SRCDIR)/$(CURDIR)
 BLUZING_PACKAGE := $(AROS_CONTRIB)/aros-bluzing
+BLUZING_PACKAGE_DIR := $(AROS_DIR_CONTRIB)/aros-bluzing
 
 BLUZING_FILES := \
     core/buffer/endian \
@@ -46,6 +50,7 @@ BLUZING_FILES := \
 
 USER_INCLUDES := -I$(BLUZING_ROOT)/include \
                  -I$(BLUZING_ROOT)/ports/aros/input \
+                 -I$(BLUZING_ROOT)/ports/aros/library \
                  -I$(BLUZING_ROOT)/ports/aros/task \
                  -I$(BLUZING_ROOT)/ports/aros/transport-usb \
                  -I$(BLUZING_ROOT)/ports/test-host
@@ -54,6 +59,15 @@ USER_CFLAGS := -Wall -Wextra -Werror
 %build_linklib mmake=linklibs-arosbluzing \
     libname=arosbluzing \
     files="$(addprefix $(BLUZING_ROOT)/,$(BLUZING_FILES))"
+
+%build_module mmake=contrib-aros-bluzing-library \
+    modname=bluetooth modtype=library \
+    conffile="$(BLUZING_ROOT)/ports/aros/library/bluetooth.conf" \
+    files="$(BLUZING_ROOT)/ports/aros/library/bluetooth_init \
+           $(BLUZING_ROOT)/ports/aros/library/bt_getapiversion" \
+    cflags="$(CFLAGS) -Wno-missing-field-initializers -Wno-unused-parameter" \
+    includedir="$(BLUZING_PACKAGE)/Developer/include" \
+    moduledir="$(BLUZING_PACKAGE_DIR)/Libs"
 
 %build_prog mmake=contrib-aros-bluzing-selftest \
     progname=aros-bluzing-selftest \

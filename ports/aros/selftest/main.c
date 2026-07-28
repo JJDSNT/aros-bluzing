@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <exec/libraries.h>
+#include <proto/exec.h>
+
 struct selftest_sink
 {
     size_t count;
@@ -110,6 +113,22 @@ static bool test_manager_task(void)
            task.task == NULL && !transport.is_open;
 }
 
+static bool test_bluetooth_library(void)
+{
+    struct Library *library = OpenLibrary(
+        (CONST_STRPTR)"bluetooth.library", 1);
+
+    if (library == NULL)
+        return false;
+    if (library->lib_Version != 1)
+    {
+        CloseLibrary(library);
+        return false;
+    }
+    CloseLibrary(library);
+    return true;
+}
+
 int main(void)
 {
     unsigned int passed = 0;
@@ -130,7 +149,11 @@ int main(void)
         ++passed;
     else
         printf("FAIL manager-task\n");
+    if (test_bluetooth_library())
+        ++passed;
+    else
+        printf("FAIL bluetooth.library\n");
 
-    printf("aros-bluzing selftest: %u/4 passed\n", passed);
-    return passed == 4 ? 0 : 20;
+    printf("aros-bluzing selftest: %u/5 passed\n", passed);
+    return passed == 5 ? 0 : 20;
 }
