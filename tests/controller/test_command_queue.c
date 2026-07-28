@@ -107,6 +107,19 @@ static size_t build_command_complete(uint8_t *buf, uint16_t opcode, uint8_t cred
     return bt_buf_writer_len(&w);
 }
 
+static size_t build_command_status(uint8_t *buf, uint16_t opcode, uint8_t credits, uint8_t status)
+{
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, buf, 16);
+    bt_buf_writer_write_u8(&w, BT_HCI_EVENT_COMMAND_STATUS);
+    bt_buf_writer_write_u8(&w, 4);
+    bt_buf_writer_write_u8(&w, status);
+    bt_buf_writer_write_u8(&w, credits);
+    bt_buf_writer_write_le16(&w, opcode);
+    return bt_buf_writer_len(&w);
+}
+
 struct completion_record
 {
     int count;
@@ -244,6 +257,46 @@ static void test_zero_credits_blocks_dispatch(void)
     BT_CHECK(ft.last_opcode == BT_HCI_OPCODE_READ_BUFFER_SIZE);
 }
 
+static void test_command_status_success_frees_slot(void)
+{
+    /* Stand-in for a command that only ever answers via Command Status
+     * and then keeps running in the background, e.g. real HCI Inquiry. */
+    const uint16_t status_only_opcode = 0x0401u;
+    struct fake_transport ft;
+    struct bt_timer_list timers;
+    struct bt_cmdq q;
+    struct completion_record rec_a = {0, 0, 0, 0};
+    struct completion_record rec_b = {0, 0, 0, 0};
+    uint8_t event[16];
+    size_t event_len;
+
+    fake_transport_init(&ft);
+    bt_timer_list_init(&timers);
+    bt_cmdq_init(&q, &ft.base, &timers);
+
+    /* A successful status must still free the queue for the next command,
+     * not wait for a Command Complete that will never come for this
+     * opcode. */
+    BT_CHECK(bt_cmdq_submit(&q, status_only_opcode, NULL, 0, 0, record_completion, &rec_a) ==
+              BT_OK);
+    BT_CHECK(bt_cmdq_submit(&q, BT_HCI_OPCODE_RESET, NULL, 0, 0, record_completion, &rec_b) ==
+              BT_OK);
+    bt_cmdq_pump(&q, 0);
+    BT_CHECK(ft.send_count == 1);
+    BT_CHECK(ft.last_opcode == status_only_opcode);
+
+    event_len = build_command_status(event, status_only_opcode, 1, 0x00);
+    bt_cmdq_on_event(&q, event, event_len, 10);
+
+    BT_CHECK(rec_a.count == 1);
+    BT_CHECK(rec_a.result == BT_CMDQ_RESULT_COMPLETE);
+    BT_CHECK(rec_a.status == 0x00);
+    /* The Inquiry slot was freed, which let the queued Reset dispatch
+     * immediately -- so outstanding is Reset now, not NULL. */
+    BT_CHECK(ft.send_count == 2);
+    BT_CHECK(ft.last_opcode == BT_HCI_OPCODE_RESET);
+}
+
 static void test_timeout(void)
 {
     struct fake_transport ft;
@@ -331,6 +384,7 @@ void run_command_queue_tests(void)
     test_submit_and_complete();
     test_multiple_simultaneous_submits();
     test_zero_credits_blocks_dispatch();
+    test_command_status_success_frees_slot();
     test_timeout();
     test_send_error_completes_immediately();
     test_pool_exhaustion();

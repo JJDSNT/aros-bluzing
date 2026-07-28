@@ -187,20 +187,26 @@ void bt_cmdq_on_event(struct bt_cmdq *q, const uint8_t *data, size_t length, uin
 
         q->command_credits = cs.num_hci_command_packets;
 
+        /*
+         * Command Status always frees the command-credit slot, whether it
+         * reports success or failure: it's the controller's ack that it
+         * has processed this command request (Num_HCI_Command_Packets is
+         * already updated accordingly). Some commands (Inquiry, Create
+         * Connection, ...) only ever complete via Command Status and then
+         * run in the background, signalling their real outcome later
+         * through a distinct, business-logic-level event (Inquiry
+         * Complete, Connection Complete) that isn't tied to
+         * command_opcode at all -- if this queue instead waited for a
+         * matching Command Complete before freeing such a slot, it would
+         * stay "outstanding" forever and deadlock every later command.
+         * Tracking that background completion, if a caller cares, is up
+         * to whoever submitted the command (see bt_controller's discovery
+         * support), not this queue.
+         */
         if (q->outstanding != NULL && q->outstanding->opcode == cs.command_opcode)
-        {
-            if (cs.status != 0x00)
-                complete_slot(q, q->outstanding, BT_CMDQ_RESULT_COMPLETE, cs.status, NULL, 0,
-                              now_us);
-            else
-                /* Accepted; the real completion (if any) arrives via a
-                 * later, command-specific event. Nothing more to do yet. */
-                bt_cmdq_pump(q, now_us);
-        }
+            complete_slot(q, q->outstanding, BT_CMDQ_RESULT_COMPLETE, cs.status, NULL, 0, now_us);
         else
-        {
             bt_cmdq_pump(q, now_us);
-        }
     }
     /* other event types are not this module's concern */
 }
