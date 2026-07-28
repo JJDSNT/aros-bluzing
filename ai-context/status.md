@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- Continuar a **Fase 1**: próximo passo é o transporte HCI virtual (`ports/test-host/virtual_transport`) + parser de HCI Event + encoder de HCI Command + sequência HCI Reset simulada (itens 4-5 do plano de commits em `fase0-propostas.md`), fechando a "Primeira entrega de código" de `project.md`.
+- **"Primeira entrega de código" de `project.md` está completa** (ver "Feito" abaixo). Próximo passo: o que falta de Fase 1 (filas, eventos, timers abstratos) e então Fase 2 (HCI mínimo completo: command complete/status genéricos, controle de créditos, fila de comandos, timeout, estado do controlador).
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -21,10 +21,14 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 ## A fazer
 
 - [x] Fase 0 (levantamento + propostas).
-- [x] Fase 1, parte 1: tipos (`include/bluetooth/types.h`), códigos de erro (`status.h`), helpers de endianness (`bt_read_le*`/`bt_write_le*`/`bt_read_be*`/`bt_write_be*` em `core/buffer/endian.c`), buffer reader/writer com bounds-checking (`core/buffer/buffer.c`) servindo de packet builder. Testes em `tests/` (round-trip, vetores conhecidos, buffers desalinhados, overflow/underflow) — 266 checks, `make test` roda limpo com `-Wall -Wextra -Werror` + ASan/UBSan.
-- [ ] Fase 1, parte 2: filas, eventos, timers abstratos (ainda não implementados — avaliar se são necessários antes do transporte virtual ou junto dele).
-- [ ] Transporte HCI virtual (`ports/test-host/virtual_transport`), parser de HCI Event, encoder de HCI Command, sequência HCI Reset simulada (LE e BE) — fecha a "Primeira entrega de código" de `project.md`.
-- [ ] Fase 2: HCI mínimo completo sobre transporte virtual.
+- [x] Fase 1, parte 1: tipos (`include/bluetooth/types.h`), códigos de erro (`status.h`), helpers de endianness (`bt_read_le*`/`bt_write_le*`/`bt_read_be*`/`bt_write_be*` em `core/buffer/endian.c`), buffer reader/writer com bounds-checking (`core/buffer/buffer.c`) servindo de packet builder.
+- [x] Abstração de transporte HCI (`include/bluetooth/transport.h`, `bt_hci_transport_ops`/`bt_hci_transport`, com callback de recepção `bt_hci_transport_recv_fn`).
+- [x] Transporte virtual (`ports/test-host/virtual_transport/`) — controlador falso que responde a HCI Reset com Command Complete, síncrono, só para testes host.
+- [x] Encoder de HCI Command e parser de HCI Event/Command Complete (`include/bluetooth/hci.h`, `protocols/hci/hci.c`).
+- [x] **Sequência HCI Reset simulada** (`tests/virtual_transport/test_virtual_transport.c`): Reset Command → transporte virtual → Command Complete Event → controller state = initialized. Isso fecha a "Primeira entrega de código" de `project.md`.
+- Testes: 296 checks (endian, buffer, HCI encode/parse, transporte virtual), `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Fase 1, parte 2: filas, eventos, timers abstratos (ainda não implementados — necessários para operação assíncrona real, não para a demo síncrona já feita).
+- [ ] Fase 2: HCI mínimo completo (command status, controle de créditos, fila de comandos, timeout, estado do controlador como módulo de verdade em `core/controller/`).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).
 - [ ] Fase 4 em diante: seguir `project.md` sem mudança de plano.
