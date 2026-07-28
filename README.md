@@ -20,6 +20,8 @@ for the ongoing investigation notes, design decisions, and implementation status
 - HID Classic and HID over GATT (HOGP), pairing/bonding, and eventually audio (A2DP).
 - Correctness on both big-endian (m68k, PowerPC) and little-endian (ARM, x86) targets, from day one —
   not retrofitted later.
+- A bare-metal-capable protocol core: no mandatory OS, POSIX, filesystem, threads, or dynamic heap;
+  platform services and storage are supplied explicitly by each port.
 - Auditable provenance: clean-room implementation against public specifications, not derived from
   BTstack or (until licensing is resolved) NimBLE source code. See project.md's licensing section.
 
@@ -47,9 +49,10 @@ Abstract HCI transport interface
 ```
 
 The portable core never touches `AllocMem`, `CreateTask`, `OpenDevice`, POSIX, or any other
-platform API directly — only through a small `bt_platform_ops` seam. Every multi-byte wire field goes
-through explicit little-/big-endian helpers (`bluetooth/endian.h`); nothing is ever cast from a raw
-buffer to a C struct.
+platform API directly — only through explicit port interfaces such as `bt_platform_ops`. It must also
+build for a freestanding bare-metal port without requiring a filesystem, threads, or a dynamic heap.
+Every multi-byte wire field goes through explicit little-/big-endian helpers
+(`bluetooth/endian.h`); nothing is ever cast from a raw buffer to a C struct.
 
 ## Repository layout
 

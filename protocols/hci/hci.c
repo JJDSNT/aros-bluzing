@@ -336,6 +336,118 @@ bt_status_t bt_hci_encode_le_set_scan_enable(struct bt_buf_writer *w, uint8_t sc
                                   bt_buf_writer_len(&pw));
 }
 
+bt_status_t bt_hci_encode_le_encrypt(struct bt_buf_writer *w, const uint8_t key[16],
+                                     const uint8_t plaintext[16])
+{
+    uint8_t params[32];
+
+    if (key == NULL || plaintext == NULL)
+        return BT_ERR_INVALID_ARGUMENT;
+    for (size_t i = 0; i < 16; ++i)
+    {
+        params[i] = key[i];
+        params[16 + i] = plaintext[i];
+    }
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_LE_ENCRYPT, params, sizeof(params));
+}
+
+bt_status_t bt_hci_parse_le_encrypt_return(const uint8_t *params, size_t params_len,
+                                            uint8_t *out_status, uint8_t encrypted[16])
+{
+    if (params == NULL || out_status == NULL || encrypted == NULL || params_len != 17)
+        return BT_ERR_INVALID_ARGUMENT;
+    *out_status = params[0];
+    for (size_t i = 0; i < 16; ++i)
+        encrypted[i] = params[i + 1];
+    return BT_OK;
+}
+
+bt_status_t bt_hci_encode_le_rand(struct bt_buf_writer *w)
+{
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_LE_RAND, NULL, 0);
+}
+
+bt_status_t bt_hci_parse_le_rand_return(const uint8_t *params, size_t params_len,
+                                         uint8_t *out_status, uint8_t random[8])
+{
+    if (params == NULL || out_status == NULL || random == NULL || params_len != 9)
+        return BT_ERR_INVALID_ARGUMENT;
+    *out_status = params[0];
+    for (size_t i = 0; i < 8; ++i)
+        random[i] = params[i + 1];
+    return BT_OK;
+}
+
+bt_status_t bt_hci_encode_le_enable_encryption(struct bt_buf_writer *w, uint16_t handle,
+                                                const uint8_t random[8], uint16_t ediv,
+                                                const uint8_t ltk[16])
+{
+    uint8_t params[28];
+    struct bt_buf_writer pw;
+    bt_status_t st;
+
+    if (handle > 0x0FFFu || random == NULL || ltk == NULL)
+        return BT_ERR_INVALID_ARGUMENT;
+    bt_buf_writer_init(&pw, params, sizeof(params));
+    st = bt_buf_writer_write_le16(&pw, handle);
+    if (st == BT_OK)
+        st = bt_buf_writer_write_bytes(&pw, random, 8);
+    if (st == BT_OK)
+        st = bt_buf_writer_write_le16(&pw, ediv);
+    if (st == BT_OK)
+        st = bt_buf_writer_write_bytes(&pw, ltk, 16);
+    return st == BT_OK ? bt_hci_encode_command(w, BT_HCI_OPCODE_LE_ENABLE_ENCRYPTION,
+                                                params, sizeof(params)) : st;
+}
+
+bt_status_t bt_hci_encode_le_read_local_p256_public_key(struct bt_buf_writer *w)
+{
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_LE_READ_LOCAL_P256_PUBLIC_KEY, NULL, 0);
+}
+
+bt_status_t bt_hci_encode_le_generate_dhkey(struct bt_buf_writer *w,
+                                             const uint8_t remote_x[32],
+                                             const uint8_t remote_y[32])
+{
+    uint8_t params[64];
+
+    if (remote_x == NULL || remote_y == NULL)
+        return BT_ERR_INVALID_ARGUMENT;
+    for (size_t i = 0; i < 32; ++i)
+    {
+        params[i] = remote_x[i];
+        params[32 + i] = remote_y[i];
+    }
+    return bt_hci_encode_command(w, BT_HCI_OPCODE_LE_GENERATE_DHKEY, params, sizeof(params));
+}
+
+bt_status_t bt_hci_parse_le_p256_public_key_complete(
+    const uint8_t *event_params, size_t event_params_len,
+    struct bt_hci_le_p256_public_key_complete *out)
+{
+    if (event_params == NULL || out == NULL || event_params_len != 66 ||
+        event_params[0] != BT_HCI_LE_META_SUBEVENT_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE)
+        return BT_ERR_INVALID_ARGUMENT;
+    out->status = event_params[1];
+    out->x = event_params + 2;
+    out->y = event_params + 34;
+    return BT_OK;
+}
+
+bt_status_t bt_hci_parse_le_generate_dhkey_complete(const uint8_t *event_params,
+                                                     size_t event_params_len,
+                                                     uint8_t *out_status,
+                                                     const uint8_t **out_dhkey)
+{
+    if (event_params == NULL || out_status == NULL || out_dhkey == NULL ||
+        event_params_len != 34 ||
+        event_params[0] != BT_HCI_LE_META_SUBEVENT_GENERATE_DHKEY_COMPLETE)
+        return BT_ERR_INVALID_ARGUMENT;
+    *out_status = event_params[1];
+    *out_dhkey = event_params + 2;
+    return BT_OK;
+}
+
 bt_status_t bt_hci_le_adv_report_iter_init(struct bt_hci_le_adv_report_iter *it,
                                             const uint8_t *event_params, size_t event_params_len)
 {

@@ -16,9 +16,9 @@
  * Server" to later work. Only the request/response pairs a basic GATT
  * Client needs are covered: MTU exchange, primary service discovery
  * (Read By Group Type), characteristic discovery (Read By Type), Read,
- * Write, and Handle Value Notification/Indication. Find Information and
- * Find By Type Value (descriptor discovery, some LE-only lookups) aren't
- * implemented yet. Attribute Type fields in requests are always 16-bit
+ * Write, Find Information, Read Blob, and Handle Value Notification/
+ * Indication. Find By Type Value isn't implemented yet. Attribute Type
+ * fields in requests are always 16-bit
  * UUIDs here (every GATT declaration type is SIG-defined and 16-bit);
  * 128-bit UUIDs appearing *inside* a response's opaque value bytes are
  * unaffected and are the caller's concern to interpret.
@@ -27,10 +27,14 @@
 #define BT_ATT_OPCODE_ERROR_RESPONSE 0x01u
 #define BT_ATT_OPCODE_EXCHANGE_MTU_REQUEST 0x02u
 #define BT_ATT_OPCODE_EXCHANGE_MTU_RESPONSE 0x03u
+#define BT_ATT_OPCODE_FIND_INFORMATION_REQUEST 0x04u
+#define BT_ATT_OPCODE_FIND_INFORMATION_RESPONSE 0x05u
 #define BT_ATT_OPCODE_READ_BY_TYPE_REQUEST 0x08u
 #define BT_ATT_OPCODE_READ_BY_TYPE_RESPONSE 0x09u
 #define BT_ATT_OPCODE_READ_REQUEST 0x0Au
 #define BT_ATT_OPCODE_READ_RESPONSE 0x0Bu
+#define BT_ATT_OPCODE_READ_BLOB_REQUEST 0x0Cu
+#define BT_ATT_OPCODE_READ_BLOB_RESPONSE 0x0Du
 #define BT_ATT_OPCODE_READ_BY_GROUP_TYPE_REQUEST 0x10u
 #define BT_ATT_OPCODE_READ_BY_GROUP_TYPE_RESPONSE 0x11u
 #define BT_ATT_OPCODE_WRITE_REQUEST 0x12u
@@ -45,6 +49,7 @@
  * server signals "no more results", the normal way Read By Group
  * Type/Read By Type discovery loops terminate -- not a real failure. */
 #define BT_ATT_ERROR_ATTRIBUTE_NOT_FOUND 0x0Au
+#define BT_ATT_ERROR_INVALID_OFFSET 0x07u
 
 #define BT_GATT_UUID_PRIMARY_SERVICE 0x2800u
 #define BT_GATT_UUID_CHARACTERISTIC 0x2803u
@@ -62,6 +67,28 @@ bt_status_t bt_att_parse_error_response(const uint8_t *params, size_t params_len
 bt_status_t bt_att_encode_exchange_mtu_request(struct bt_buf_writer *w, uint16_t client_rx_mtu);
 bt_status_t bt_att_parse_exchange_mtu_response(const uint8_t *params, size_t params_len,
                                                 uint16_t *out_server_rx_mtu);
+
+bt_status_t bt_att_encode_find_information_request(struct bt_buf_writer *w,
+                                                    uint16_t starting_handle,
+                                                    uint16_t ending_handle);
+
+struct bt_att_information_entry
+{
+    uint16_t handle;
+    const uint8_t *uuid;
+    uint8_t uuid_len;
+};
+
+struct bt_att_find_information_iter
+{
+    struct bt_buf_reader r;
+    uint8_t entry_len;
+};
+
+bt_status_t bt_att_find_information_response_iter_init(
+    struct bt_att_find_information_iter *it, const uint8_t *params, size_t params_len);
+bt_status_t bt_att_find_information_response_iter_next(
+    struct bt_att_find_information_iter *it, struct bt_att_information_entry *out);
 
 /* Read By Group Type: primary/secondary service discovery. */
 bt_status_t bt_att_encode_read_by_group_type_request(struct bt_buf_writer *w,
@@ -113,6 +140,8 @@ bt_status_t bt_att_read_by_type_response_iter_next(struct bt_att_read_by_type_it
                                                      struct bt_att_type_entry *out);
 
 bt_status_t bt_att_encode_read_request(struct bt_buf_writer *w, uint16_t handle);
+bt_status_t bt_att_encode_read_blob_request(struct bt_buf_writer *w, uint16_t handle,
+                                             uint16_t value_offset);
 /* Read Response has no fixed structure beyond "the rest of the PDU is the
  * value" -- callers read params directly once the opcode is confirmed. */
 

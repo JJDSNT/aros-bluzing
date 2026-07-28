@@ -7,7 +7,7 @@ Esta pasta existe para que o assistente de IA mantenha seu próprio acompanhamen
 O `aros-bluzing` é o projeto de uma stack Bluetooth Host nativa e portável para o AROS, descrita em detalhe em [`../project.md`](../project.md). Resumo:
 
 - **Objetivo**: implementar Bluetooth (Classic + LE) para o AROS com um núcleo de protocolos portável (independente de SO), integrado via `bluetooth.library`, uma Bluetooth Manager Task, e transportes HCI plugáveis (Poseidon USB, UART, SDIO, virtual).
-- **Requisito estrutural**: compatibilidade big-endian/little-endian desde o início (m68k, PowerPC, ARM, AArch64, x86, x86-64) — sem casts de buffer para struct, com helpers explícitos de leitura/escrita LE/BE.
+- **Requisitos estruturais de portabilidade**: compatibilidade big-endian/little-endian desde o início (m68k, PowerPC, ARM, AArch64, x86, x86-64) — sem casts de buffer para struct, com helpers explícitos de leitura/escrita LE/BE — e núcleo apto a port bare metal/freestanding, sem POSIX, filesystem, threads ou heap obrigatórios.
 - **Separação de responsabilidades**: Poseidon cuida só de USB; uma classe `btusb` implementa o transporte HCI sobre USB; o núcleo Bluetooth não conhece detalhes de Poseidon.
 - **Licenciamento**: procedência auditável — BTstack não pode ser copiado/traduzido; NimBLE só como oráculo de teste/comportamento até resolução jurídica Apache 2.0 vs. licença do AROS.
 - **Ordem de implementação**: Fase 0 (levantamento do AROS, sem inventar APIs) → Fase 1 (fundação portátil: tipos, endian, buffers) → Fase 2 (HCI mínimo + transporte virtual) → Fase 3 (integração Poseidon) → Fase 4 (discovery) → Fase 5 (L2CAP) → Fase 6 (SDP/GATT/segurança) → Fase 7 (HID dual-mode) → Fase 8 (RFCOMM e demais perfis).

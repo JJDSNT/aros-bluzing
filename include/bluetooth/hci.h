@@ -21,10 +21,23 @@
 #define BT_HCI_OGF_LE_CONTROLLER 0x08u
 #define BT_HCI_OCF_LE_SET_SCAN_PARAMETERS 0x000Bu
 #define BT_HCI_OCF_LE_SET_SCAN_ENABLE 0x000Cu
+#define BT_HCI_OCF_LE_ENCRYPT 0x0017u
+#define BT_HCI_OCF_LE_RAND 0x0018u
+#define BT_HCI_OCF_LE_ENABLE_ENCRYPTION 0x0019u
+#define BT_HCI_OCF_LE_READ_LOCAL_P256_PUBLIC_KEY 0x0025u
+#define BT_HCI_OCF_LE_GENERATE_DHKEY 0x0026u
 #define BT_HCI_OPCODE_LE_SET_SCAN_PARAMETERS \
     BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_SET_SCAN_PARAMETERS)
 #define BT_HCI_OPCODE_LE_SET_SCAN_ENABLE \
     BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_SET_SCAN_ENABLE)
+#define BT_HCI_OPCODE_LE_ENCRYPT BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_ENCRYPT)
+#define BT_HCI_OPCODE_LE_RAND BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_RAND)
+#define BT_HCI_OPCODE_LE_ENABLE_ENCRYPTION \
+    BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_ENABLE_ENCRYPTION)
+#define BT_HCI_OPCODE_LE_READ_LOCAL_P256_PUBLIC_KEY \
+    BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_READ_LOCAL_P256_PUBLIC_KEY)
+#define BT_HCI_OPCODE_LE_GENERATE_DHKEY \
+    BT_HCI_OPCODE(BT_HCI_OGF_LE_CONTROLLER, BT_HCI_OCF_LE_GENERATE_DHKEY)
 
 #define BT_HCI_OGF_INFORMATIONAL 0x04u
 #define BT_HCI_OCF_READ_LOCAL_VERSION_INFO 0x0001u
@@ -44,6 +57,8 @@
 #define BT_HCI_EVENT_LE_META 0x3Eu
 
 #define BT_HCI_LE_META_SUBEVENT_ADVERTISING_REPORT 0x02u
+#define BT_HCI_LE_META_SUBEVENT_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE 0x08u
+#define BT_HCI_LE_META_SUBEVENT_GENERATE_DHKEY_COMPLETE 0x09u
 
 #define BT_HCI_COMMAND_HEADER_LEN 3 /* opcode(2) + parameter length(1) */
 #define BT_HCI_EVENT_HEADER_LEN 2   /* event code(1) + parameter length(1) */
@@ -184,6 +199,39 @@ bt_status_t bt_hci_encode_le_set_scan_parameters(struct bt_buf_writer *w, uint8_
                                                   uint8_t scanning_filter_policy);
 bt_status_t bt_hci_encode_le_set_scan_enable(struct bt_buf_writer *w, uint8_t scan_enable,
                                               uint8_t filter_duplicates);
+
+/* Security controller services. Byte arrays use HCI wire order (least
+ * significant octet first), intentionally distinct from smp_crypto.h's
+ * FIPS/spec-display order. */
+bt_status_t bt_hci_encode_le_encrypt(struct bt_buf_writer *w, const uint8_t key[16],
+                                     const uint8_t plaintext[16]);
+bt_status_t bt_hci_parse_le_encrypt_return(const uint8_t *params, size_t params_len,
+                                            uint8_t *out_status, uint8_t encrypted[16]);
+bt_status_t bt_hci_encode_le_rand(struct bt_buf_writer *w);
+bt_status_t bt_hci_parse_le_rand_return(const uint8_t *params, size_t params_len,
+                                         uint8_t *out_status, uint8_t random[8]);
+bt_status_t bt_hci_encode_le_enable_encryption(struct bt_buf_writer *w, uint16_t handle,
+                                                const uint8_t random[8], uint16_t ediv,
+                                                const uint8_t ltk[16]);
+bt_status_t bt_hci_encode_le_read_local_p256_public_key(struct bt_buf_writer *w);
+bt_status_t bt_hci_encode_le_generate_dhkey(struct bt_buf_writer *w,
+                                             const uint8_t remote_x[32],
+                                             const uint8_t remote_y[32]);
+
+struct bt_hci_le_p256_public_key_complete
+{
+    uint8_t status;
+    const uint8_t *x;
+    const uint8_t *y;
+};
+
+bt_status_t bt_hci_parse_le_p256_public_key_complete(
+    const uint8_t *event_params, size_t event_params_len,
+    struct bt_hci_le_p256_public_key_complete *out);
+bt_status_t bt_hci_parse_le_generate_dhkey_complete(const uint8_t *event_params,
+                                                     size_t event_params_len,
+                                                     uint8_t *out_status,
+                                                     const uint8_t **out_dhkey);
 
 struct bt_hci_le_adv_report
 {

@@ -71,6 +71,31 @@ static void test_read_by_group_type_service_discovery(void)
     BT_CHECK(bt_att_read_by_group_type_response_iter_next(&it, &entry) == BT_ERR_BUFFER_UNDERFLOW);
 }
 
+static void test_find_information(void)
+{
+    uint8_t request[5];
+    const uint8_t response[] = {0x01, 0x03, 0x00, 0x02, 0x29,
+                               0x04, 0x00, 0x08, 0x29};
+    struct bt_buf_writer w;
+    struct bt_att_find_information_iter it;
+    struct bt_att_information_entry entry;
+
+    bt_buf_writer_init(&w, request, sizeof(request));
+    BT_CHECK(bt_att_encode_find_information_request(&w, 3, 9) == BT_OK);
+    BT_CHECK(request[0] == BT_ATT_OPCODE_FIND_INFORMATION_REQUEST);
+    BT_CHECK(request[1] == 3 && request[2] == 0);
+    BT_CHECK(request[3] == 9 && request[4] == 0);
+    BT_CHECK(bt_att_find_information_response_iter_init(&it, response,
+                                                        sizeof(response)) == BT_OK);
+    BT_CHECK(bt_att_find_information_response_iter_next(&it, &entry) == BT_OK);
+    BT_CHECK(entry.handle == 3 && entry.uuid_len == 2);
+    BT_CHECK(entry.uuid[0] == 0x02 && entry.uuid[1] == 0x29);
+    BT_CHECK(bt_att_find_information_response_iter_next(&it, &entry) == BT_OK);
+    BT_CHECK(entry.handle == 4 && entry.uuid[0] == 0x08 && entry.uuid[1] == 0x29);
+    BT_CHECK(bt_att_find_information_response_iter_next(&it, &entry) ==
+              BT_ERR_BUFFER_UNDERFLOW);
+}
+
 static void test_read_by_type_characteristic_discovery(void)
 {
     uint8_t buf[8];
@@ -109,6 +134,13 @@ static void test_read_and_write_requests(void)
     BT_CHECK(bt_att_encode_read_request(&w, 0x0003) == BT_OK);
     BT_CHECK(bt_buf_writer_len(&w) == 3);
     BT_CHECK(buf[0] == BT_ATT_OPCODE_READ_REQUEST && buf[1] == 0x03 && buf[2] == 0x00);
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_att_encode_read_blob_request(&w, 0x1234, 0x5678) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 5);
+    BT_CHECK(buf[0] == BT_ATT_OPCODE_READ_BLOB_REQUEST);
+    BT_CHECK(buf[1] == 0x34 && buf[2] == 0x12);
+    BT_CHECK(buf[3] == 0x78 && buf[4] == 0x56);
 
     bt_buf_writer_init(&w, buf, sizeof(buf));
     BT_CHECK(bt_att_encode_write_request(&w, 0x0003, value, sizeof(value)) == BT_OK);
@@ -158,6 +190,7 @@ void run_att_tests(void)
     test_error_response();
     test_exchange_mtu();
     test_read_by_group_type_service_discovery();
+    test_find_information();
     test_read_by_type_characteristic_discovery();
     test_read_and_write_requests();
     test_handle_value_notification();

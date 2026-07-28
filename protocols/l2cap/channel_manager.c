@@ -127,6 +127,7 @@ static void fire_opened(struct bt_l2cap_channel *chan)
     info.close_reason = BT_L2CAP_CLOSE_LOCAL; /* unused for this event */
     info.data = NULL;
     info.data_len = 0;
+    info.now_us = 0; /* synchronous open has no clock argument */
     fire_event(chan, &info);
 }
 
@@ -142,6 +143,7 @@ static void finish_close(struct bt_l2cap_channel *chan, enum bt_l2cap_close_reas
     info.close_reason = reason;
     info.data = NULL;
     info.data_len = 0;
+    info.now_us = 0;
 
     /* Free the slot before invoking the callback: a well-behaved consumer
      * may react by opening a new channel, which should be able to reuse
@@ -607,6 +609,7 @@ void bt_l2cap_channel_manager_on_acl(struct bt_l2cap_channel_manager *mgr, uint8
         info.close_reason = BT_L2CAP_CLOSE_LOCAL; /* unused for this event */
         info.data = payload;
         info.data_len = hdr.length;
+        info.now_us = now_us;
         fire_event(chan, &info);
     }
     /* Unknown CID, or channel not OPEN yet: silently drop. */

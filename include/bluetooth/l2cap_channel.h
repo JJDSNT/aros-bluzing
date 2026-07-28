@@ -79,6 +79,7 @@ struct bt_l2cap_channel_event_info
     enum bt_l2cap_close_reason close_reason; /* meaningful only for CLOSED */
     const uint8_t *data;                     /* meaningful only for DATA */
     size_t data_len;
+    uint64_t now_us; /* meaningful only for DATA; supplied by on_acl() */
 };
 
 typedef void (*bt_l2cap_channel_event_fn)(struct bt_l2cap_channel_event_info *info,

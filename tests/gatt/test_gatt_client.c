@@ -161,8 +161,9 @@ struct complete_log
     uint8_t att_error_code;
     struct bt_gatt_service services[BT_GATT_CLIENT_MAX_SERVICES];
     struct bt_gatt_characteristic characteristics[BT_GATT_CLIENT_MAX_CHARACTERISTICS];
+    struct bt_gatt_descriptor descriptors[BT_GATT_CLIENT_MAX_DESCRIPTORS];
     size_t count_items;
-    uint8_t value[64];
+    uint8_t value[BT_GATT_CLIENT_MAX_VALUE_LEN];
     size_t value_len;
 };
 
@@ -179,6 +180,9 @@ static void on_complete(struct bt_gatt_client_completion *completion, void *user
     if (completion->characteristics != NULL)
         memcpy(log->characteristics, completion->characteristics,
                completion->count * sizeof(struct bt_gatt_characteristic));
+    if (completion->descriptors != NULL)
+        memcpy(log->descriptors, completion->descriptors,
+               completion->count * sizeof(struct bt_gatt_descriptor));
     if (completion->value != NULL && completion->value_len <= sizeof(log->value))
     {
         memcpy(log->value, completion->value, completion->value_len);
@@ -196,7 +200,7 @@ static void connect_client(struct bt_l2cap_channel_manager *mgr, struct fake_tra
     uint8_t rsp[3];
     struct bt_buf_writer w;
 
-    BT_CHECK(bt_gatt_client_connect(client, on_connect, &log) == BT_OK);
+    BT_CHECK(bt_gatt_client_connect(client, on_connect, &log, 0) == BT_OK);
     BT_CHECK(log.count == 0); /* not done until MTU exchange completes */
 
     BT_CHECK(take_last_att_pdu(ft, &payload, &payload_len));
@@ -241,7 +245,7 @@ static void test_connect_mtu_error_still_connects(void)
     bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
     bt_gatt_client_init(&client, &mgr);
 
-    BT_CHECK(bt_gatt_client_connect(&client, on_connect, &log) == BT_OK);
+    BT_CHECK(bt_gatt_client_connect(&client, on_connect, &log, 0) == BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
 
     bt_buf_writer_init(&w, rsp, sizeof(rsp));
@@ -261,7 +265,7 @@ static void test_discover_services_single_round(void)
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log clog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log clog = {0};
     const uint8_t *payload;
     size_t payload_len;
     uint8_t rsp[32];
@@ -272,7 +276,7 @@ static void test_discover_services_single_round(void)
     bt_gatt_client_init(&client, &mgr);
     connect_client(&mgr, &ft, &client);
 
-    BT_CHECK(bt_gatt_client_discover_services(&client, on_complete, &clog) == BT_OK);
+    BT_CHECK(bt_gatt_client_discover_services(&client, on_complete, &clog, 0) == BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
     BT_CHECK(payload[0] == BT_ATT_OPCODE_READ_BY_GROUP_TYPE_REQUEST);
 
@@ -302,7 +306,7 @@ static void test_discover_services_multi_round_terminated_by_error(void)
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log clog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log clog = {0};
     const uint8_t *payload;
     size_t payload_len;
     uint8_t rsp[32];
@@ -313,7 +317,7 @@ static void test_discover_services_multi_round_terminated_by_error(void)
     bt_gatt_client_init(&client, &mgr);
     connect_client(&mgr, &ft, &client);
 
-    BT_CHECK(bt_gatt_client_discover_services(&client, on_complete, &clog) == BT_OK);
+    BT_CHECK(bt_gatt_client_discover_services(&client, on_complete, &clog, 0) == BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
 
     /* First round: one service ending well before 0xFFFF -- must trigger
@@ -350,7 +354,7 @@ static void test_discover_characteristics(void)
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log clog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log clog = {0};
     const uint8_t *payload;
     size_t payload_len;
     uint8_t rsp[32];
@@ -365,7 +369,7 @@ static void test_discover_characteristics(void)
      * own handle below, so this one response is enough: the discovery
      * loop only asks again while the last handle seen is still short of
      * the requested range end. */
-    BT_CHECK(bt_gatt_client_discover_characteristics(&client, 0x0001, 0x0002, on_complete, &clog) ==
+    BT_CHECK(bt_gatt_client_discover_characteristics(&client, 0x0001, 0x0002, on_complete, &clog, 0) ==
               BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
     BT_CHECK(payload[0] == BT_ATT_OPCODE_READ_BY_TYPE_REQUEST);
@@ -392,8 +396,8 @@ static void test_read_and_write(void)
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log rlog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
-    struct complete_log wlog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log rlog = {0};
+    struct complete_log wlog = {0};
     const uint8_t *payload;
     size_t payload_len;
     uint8_t rsp[8];
@@ -405,7 +409,7 @@ static void test_read_and_write(void)
     bt_gatt_client_init(&client, &mgr);
     connect_client(&mgr, &ft, &client);
 
-    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog) == BT_OK);
+    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog, 0) == BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
     BT_CHECK(payload[0] == BT_ATT_OPCODE_READ_REQUEST);
 
@@ -420,7 +424,7 @@ static void test_read_and_write(void)
     BT_CHECK(memcmp(rlog.value, "hi", 2) == 0);
 
     BT_CHECK(bt_gatt_client_write(&client, 0x0005, write_value, sizeof(write_value), on_complete,
-                                    &wlog) == BT_OK);
+                                    &wlog, 10) == BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
     BT_CHECK(payload[0] == BT_ATT_OPCODE_WRITE_REQUEST);
     BT_CHECK(payload[3] == 0x01);
@@ -433,12 +437,51 @@ static void test_read_and_write(void)
     BT_CHECK(wlog.result == BT_GATT_CLIENT_OK);
 }
 
+static void test_discover_descriptors(void)
+{
+    struct fake_transport ft;
+    struct bt_l2cap_channel_manager mgr;
+    struct bt_gatt_client client;
+    struct complete_log log = {0};
+    const uint8_t *payload;
+    size_t payload_len;
+    uint8_t rsp[16];
+    struct bt_buf_writer w;
+
+    fake_transport_init(&ft);
+    bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
+    bt_gatt_client_init(&client, &mgr);
+    connect_client(&mgr, &ft, &client);
+
+    BT_CHECK(bt_gatt_client_discover_descriptors(&client, 0x0003, 0x0004,
+                                                  on_complete, &log, 0) == BT_OK);
+    BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
+    BT_CHECK(payload[0] == BT_ATT_OPCODE_FIND_INFORMATION_REQUEST);
+    BT_CHECK(payload[1] == 3 && payload[3] == 4);
+
+    bt_buf_writer_init(&w, rsp, sizeof(rsp));
+    bt_buf_writer_write_u8(&w, BT_ATT_OPCODE_FIND_INFORMATION_RESPONSE);
+    bt_buf_writer_write_u8(&w, 1);
+    bt_buf_writer_write_le16(&w, 3);
+    bt_buf_writer_write_le16(&w, 0x2902);
+    bt_buf_writer_write_le16(&w, 4);
+    bt_buf_writer_write_le16(&w, 0x2908);
+    feed_att_pdu(&mgr, rsp, bt_buf_writer_len(&w), 10);
+
+    BT_CHECK(log.count == 1 && log.result == BT_GATT_CLIENT_OK);
+    BT_CHECK(log.count_items == 2);
+    BT_CHECK(log.descriptors[0].handle == 3 &&
+             log.descriptors[0].uuid16 == 0x2902);
+    BT_CHECK(log.descriptors[1].handle == 4 &&
+             log.descriptors[1].uuid16 == 0x2908);
+}
+
 static void test_read_att_error(void)
 {
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log rlog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log rlog = {0};
     const uint8_t *payload;
     size_t payload_len;
     uint8_t rsp[8];
@@ -449,7 +492,7 @@ static void test_read_att_error(void)
     bt_gatt_client_init(&client, &mgr);
     connect_client(&mgr, &ft, &client);
 
-    BT_CHECK(bt_gatt_client_read(&client, 0x0099, on_complete, &rlog) == BT_OK);
+    BT_CHECK(bt_gatt_client_read(&client, 0x0099, on_complete, &rlog, 0) == BT_OK);
     BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
 
     bt_buf_writer_init(&w, rsp, sizeof(rsp));
@@ -462,6 +505,51 @@ static void test_read_att_error(void)
     BT_CHECK(rlog.count == 1);
     BT_CHECK(rlog.result == BT_GATT_CLIENT_ERROR_ATT);
     BT_CHECK(rlog.att_error_code == 0x02);
+}
+
+static void test_long_read_uses_read_blob(void)
+{
+    struct fake_transport ft;
+    struct bt_l2cap_channel_manager mgr;
+    struct bt_gatt_client client;
+    struct complete_log rlog = {0};
+    const uint8_t *payload;
+    size_t payload_len;
+    uint8_t rsp[100];
+    struct bt_buf_writer w;
+    size_t i;
+
+    fake_transport_init(&ft);
+    bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
+    bt_gatt_client_init(&client, &mgr);
+    connect_client(&mgr, &ft, &client); /* negotiated MTU = 100 */
+
+    BT_CHECK(bt_gatt_client_read(&client, 0x0042, on_complete, &rlog, 0) == BT_OK);
+    BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
+    BT_CHECK(payload[0] == BT_ATT_OPCODE_READ_REQUEST);
+
+    bt_buf_writer_init(&w, rsp, sizeof(rsp));
+    bt_buf_writer_write_u8(&w, BT_ATT_OPCODE_READ_RESPONSE);
+    for (i = 0; i < 99; ++i)
+        bt_buf_writer_write_u8(&w, (uint8_t)i);
+    feed_att_pdu(&mgr, rsp, bt_buf_writer_len(&w), 10);
+
+    BT_CHECK(rlog.count == 0);
+    BT_CHECK(take_last_att_pdu(&ft, &payload, &payload_len));
+    BT_CHECK(payload_len == 5 && payload[0] == BT_ATT_OPCODE_READ_BLOB_REQUEST);
+    BT_CHECK(payload[1] == 0x42 && payload[2] == 0x00);
+    BT_CHECK(payload[3] == 99 && payload[4] == 0);
+
+    bt_buf_writer_init(&w, rsp, sizeof(rsp));
+    bt_buf_writer_write_u8(&w, BT_ATT_OPCODE_READ_BLOB_RESPONSE);
+    bt_buf_writer_write_u8(&w, 0xAA);
+    bt_buf_writer_write_u8(&w, 0xBB);
+    feed_att_pdu(&mgr, rsp, bt_buf_writer_len(&w), 20);
+
+    BT_CHECK(rlog.count == 1 && rlog.result == BT_GATT_CLIENT_OK);
+    BT_CHECK(rlog.value_len == 101);
+    BT_CHECK(rlog.value[0] == 0 && rlog.value[98] == 98);
+    BT_CHECK(rlog.value[99] == 0xAA && rlog.value[100] == 0xBB);
 }
 
 struct notify_log
@@ -533,14 +621,14 @@ static void test_channel_closed_while_busy(void)
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log rlog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log rlog = {0};
 
     fake_transport_init(&ft);
     bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
     bt_gatt_client_init(&client, &mgr);
     connect_client(&mgr, &ft, &client);
 
-    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog) == BT_OK);
+    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog, 0) == BT_OK);
     BT_CHECK(client.busy);
 
     bt_l2cap_channel_manager_close(&mgr, BT_L2CAP_CID_ATT, 30); /* local close (fixed channel) */
@@ -555,16 +643,64 @@ static void test_busy_guard(void)
     struct fake_transport ft;
     struct bt_l2cap_channel_manager mgr;
     struct bt_gatt_client client;
-    struct complete_log rlog = {0, BT_GATT_CLIENT_OK, 0, {{0}}, {{0}}, 0, {0}, 0};
+    struct complete_log rlog = {0};
 
     fake_transport_init(&ft);
     bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
     bt_gatt_client_init(&client, &mgr);
     connect_client(&mgr, &ft, &client);
 
-    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog) == BT_OK);
-    BT_CHECK(bt_gatt_client_discover_services(&client, on_complete, &rlog) ==
+    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog, 0) == BT_OK);
+    BT_CHECK(bt_gatt_client_discover_services(&client, on_complete, &rlog, 0) ==
               BT_ERR_INVALID_ARGUMENT);
+}
+
+static void test_request_timeout_and_late_response(void)
+{
+    struct fake_transport ft;
+    struct bt_l2cap_channel_manager mgr;
+    struct bt_gatt_client client;
+    struct complete_log rlog = {0};
+    uint8_t rsp[] = {BT_ATT_OPCODE_READ_RESPONSE, 0x42};
+
+    fake_transport_init(&ft);
+    bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
+    bt_gatt_client_init(&client, &mgr);
+    connect_client(&mgr, &ft, &client);
+
+    BT_CHECK(bt_gatt_client_read(&client, 0x0003, on_complete, &rlog, 100) == BT_OK);
+    bt_gatt_client_tick(&client, 100 + BT_GATT_CLIENT_REQUEST_TIMEOUT_US - 1);
+    BT_CHECK(rlog.count == 0);
+    BT_CHECK(client.busy);
+
+    bt_gatt_client_tick(&client, 100 + BT_GATT_CLIENT_REQUEST_TIMEOUT_US);
+    BT_CHECK(rlog.count == 1);
+    BT_CHECK(rlog.result == BT_GATT_CLIENT_ERROR_TIMEOUT);
+    BT_CHECK(!client.busy);
+
+    feed_att_pdu(&mgr, rsp, sizeof(rsp), 100 + BT_GATT_CLIENT_REQUEST_TIMEOUT_US + 1);
+    BT_CHECK(rlog.count == 1); /* late response must not complete a newer operation */
+}
+
+static void test_mtu_timeout_falls_back_to_default(void)
+{
+    struct fake_transport ft;
+    struct bt_l2cap_channel_manager mgr;
+    struct bt_gatt_client client;
+    struct connect_log log = {0, false};
+
+    fake_transport_init(&ft);
+    bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
+    bt_gatt_client_init(&client, &mgr);
+
+    BT_CHECK(bt_gatt_client_connect(&client, on_connect, &log, 50) == BT_OK);
+    BT_CHECK(log.count == 0);
+    bt_gatt_client_tick(&client, 50 + BT_GATT_CLIENT_REQUEST_TIMEOUT_US);
+
+    BT_CHECK(log.count == 1);
+    BT_CHECK(log.success);
+    BT_CHECK(client.channel_ready);
+    BT_CHECK(client.mtu == BT_ATT_DEFAULT_MTU);
 }
 
 void run_gatt_client_tests(void)
@@ -575,8 +711,12 @@ void run_gatt_client_tests(void)
     test_discover_services_multi_round_terminated_by_error();
     test_discover_characteristics();
     test_read_and_write();
+    test_discover_descriptors();
     test_read_att_error();
+    test_long_read_uses_read_blob();
     test_notification_and_indication();
     test_channel_closed_while_busy();
     test_busy_guard();
+    test_request_timeout_and_late_response();
+    test_mtu_timeout_falls_back_to_default();
 }

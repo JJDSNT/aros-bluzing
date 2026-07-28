@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Projetar e implementar uma nova stack Bluetooth Host para o AROS, com arquitetura modular, compatível com plataformas big-endian e little-endian e integrada de forma natural ao Exec, ao Poseidon e aos demais subsistemas do AROS.
+Projetar e implementar uma nova stack Bluetooth Host para o AROS, com arquitetura modular, compatível com plataformas big-endian e little-endian, portável para ambientes bare metal e integrada de forma natural ao Exec, ao Poseidon e aos demais subsistemas do AROS.
 
 A stack deve suportar progressivamente:
 
@@ -15,7 +15,7 @@ A stack deve suportar progressivamente:
 * pairing e bonding;
 * posteriormente áudio Bluetooth.
 
-O AROS será o sistema operacional principal e o primeiro consumidor da stack. Entretanto, o núcleo dos protocolos deve permanecer independente do sistema operacional para permitir testes externos, fuzzing, replay de pacotes e validação em diferentes arquiteturas.
+O AROS será o sistema operacional principal e o primeiro consumidor da stack. Entretanto, o núcleo dos protocolos deve permanecer independente do sistema operacional para permitir testes externos, fuzzing, replay de pacotes, validação em diferentes arquiteturas e uso em sistemas bare metal.
 
 ---
 
@@ -51,6 +51,16 @@ Interface abstrata de transporte HCI
 ```
 
 O AROS deve ser tratado como o port principal, e não como uma adaptação secundária.
+
+O núcleo portátil também deve admitir um port bare metal. Isso implica:
+
+* não depender de POSIX, Exec ou outro sistema operacional;
+* não exigir threads, processos, sockets ou sistema de arquivos;
+* não chamar diretamente serviços de plataforma: temporização, agendamento, logs e transporte devem passar por interfaces explícitas;
+* não exigir alocação dinâmica: o port pode fornecer um allocator, mas os componentes devem admitir armazenamento fornecido pelo chamador e limites definidos em compilação;
+* limitar a dependência da biblioteca C ao subconjunto freestanding disponível no alvo ou fornecer abstrações/substituições documentadas;
+* permitir execução cooperativa em um único contexto, sem impedir que ports com sistema operacional usem tarefas e eventos;
+* manter todo estado da instância explícito, sem singleton global obrigatório.
 
 ---
 
@@ -989,6 +999,8 @@ Testar com:
 * C compatível com o toolchain do AROS;
 * sem dependências desnecessárias de C++;
 * sem POSIX no núcleo;
+* núcleo compatível com ambiente C freestanding e port bare metal;
+* alocação dinâmica opcional, nunca requisito obrigatório do núcleo;
 * warnings tratados como erros quando viável;
 * nenhuma alocação em callbacks de baixo nível quando evitável;
 * limites explícitos para buffers;
@@ -1072,6 +1084,7 @@ O mesmo teste deve passar em configuração big-endian e little-endian.
 A implementação será considerada correta quando:
 
 * o núcleo dos protocolos não depender do AROS;
+* o núcleo puder ser integrado em um alvo bare metal, sem POSIX, sistema de arquivos ou heap obrigatório;
 * o port principal usar naturalmente Exec e Poseidon;
 * Poseidon permanecer isolado abaixo da interface HCI;
 * o mesmo driver de classe Bluetooth USB servir às diferentes arquiteturas AROS;

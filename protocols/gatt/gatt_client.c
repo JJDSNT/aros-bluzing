@@ -3,7 +3,14 @@
 
 #include <string.h>
 
-static void issue_current_request(struct bt_gatt_client *client);
+static void issue_current_request(struct bt_gatt_client *client, uint64_t now_us);
+
+static uint64_t request_deadline(uint64_t now_us)
+{
+    if (UINT64_MAX - now_us < BT_GATT_CLIENT_REQUEST_TIMEOUT_US)
+        return UINT64_MAX;
+    return now_us + BT_GATT_CLIENT_REQUEST_TIMEOUT_US;
+}
 
 static void complete(struct bt_gatt_client *client, enum bt_gatt_client_result result,
                       uint8_t att_error_code)
@@ -13,6 +20,7 @@ static void complete(struct bt_gatt_client *client, enum bt_gatt_client_result r
     void *ud = client->complete_user_data;
 
     client->busy = false;
+    client->request_deadline_us = 0;
 
     memset(&completion, 0, sizeof(completion));
     completion.result = result;
@@ -29,6 +37,10 @@ static void complete(struct bt_gatt_client *client, enum bt_gatt_client_result r
             break;
         case BT_GATT_CLIENT_OP_DISCOVER_CHARACTERISTICS:
             completion.characteristics = client->result.characteristics;
+            completion.count = client->result_count;
+            break;
+        case BT_GATT_CLIENT_OP_DISCOVER_DESCRIPTORS:
+            completion.descriptors = client->result.descriptors;
             completion.count = client->result_count;
             break;
         case BT_GATT_CLIENT_OP_READ:
@@ -51,6 +63,7 @@ static void handle_mtu_response(struct bt_gatt_client *client, uint8_t opcode,
     uint16_t server_mtu;
 
     client->busy = false;
+    client->request_deadline_us = 0;
 
     if (opcode == BT_ATT_OPCODE_EXCHANGE_MTU_RESPONSE &&
         bt_att_parse_exchange_mtu_response(params, params_len, &server_mtu) == BT_OK)
@@ -71,7 +84,8 @@ static void handle_mtu_response(struct bt_gatt_client *client, uint8_t opcode,
 }
 
 static void handle_discover_services_response(struct bt_gatt_client *client, uint8_t opcode,
-                                                const uint8_t *params, size_t params_len)
+                                                const uint8_t *params, size_t params_len,
+                                                uint64_t now_us)
 {
     struct bt_att_group_type_iter it;
     struct bt_att_group_entry entry;
@@ -121,11 +135,12 @@ static void handle_discover_services_response(struct bt_gatt_client *client, uin
     }
 
     client->pending_handle = (uint16_t)(last_end + 1);
-    issue_current_request(client);
+    issue_current_request(client, now_us);
 }
 
 static void handle_discover_characteristics_response(struct bt_gatt_client *client, uint8_t opcode,
-                                                       const uint8_t *params, size_t params_len)
+                                                       const uint8_t *params, size_t params_len,
+                                                       uint64_t now_us)
 {
     struct bt_att_read_by_type_iter it;
     struct bt_att_type_entry entry;
@@ -176,26 +191,89 @@ static void handle_discover_characteristics_response(struct bt_gatt_client *clie
     }
 
     client->pending_handle = (uint16_t)(last_handle + 1);
-    issue_current_request(client);
+    issue_current_request(client, now_us);
 }
 
-static void handle_read_response(struct bt_gatt_client *client, uint8_t opcode,
-                                  const uint8_t *params, size_t params_len)
+static void handle_discover_descriptors_response(struct bt_gatt_client *client,
+                                                  uint8_t opcode,
+                                                  const uint8_t *params,
+                                                  size_t params_len,
+                                                  uint64_t now_us)
 {
-    if (opcode != BT_ATT_OPCODE_READ_RESPONSE)
+    struct bt_att_find_information_iter it;
+    struct bt_att_information_entry entry;
+    uint16_t last_handle = client->pending_handle;
+    bool any = false;
+
+    if (opcode != BT_ATT_OPCODE_FIND_INFORMATION_RESPONSE ||
+        bt_att_find_information_response_iter_init(&it, params, params_len) != BT_OK)
     {
         complete(client, BT_GATT_CLIENT_ERROR_PROTOCOL, 0);
         return;
     }
-    if (params_len > sizeof(client->result.value))
+    while (bt_att_find_information_response_iter_next(&it, &entry) == BT_OK)
+    {
+        any = true;
+        last_handle = entry.handle;
+        if (entry.uuid_len == 2)
+        {
+            struct bt_gatt_descriptor *descriptor;
+
+            if (client->result_count == BT_GATT_CLIENT_MAX_DESCRIPTORS)
+            {
+                complete(client, BT_GATT_CLIENT_ERROR_TOO_LARGE, 0);
+                return;
+            }
+            descriptor = &client->result.descriptors[client->result_count++];
+            descriptor->handle = entry.handle;
+            descriptor->uuid16 = bt_read_le16(entry.uuid);
+        }
+    }
+    if (!any)
+    {
+        complete(client, BT_GATT_CLIENT_ERROR_PROTOCOL, 0);
+        return;
+    }
+    if (last_handle >= client->discover_range_end || last_handle == 0xFFFFu)
+    {
+        complete(client, BT_GATT_CLIENT_OK, 0);
+        return;
+    }
+    client->pending_handle = (uint16_t)(last_handle + 1u);
+    issue_current_request(client, now_us);
+}
+
+static void handle_read_response(struct bt_gatt_client *client, uint8_t opcode,
+                                  const uint8_t *params, size_t params_len,
+                                  uint64_t now_us)
+{
+    uint8_t expected = client->result_len == 0 ? BT_ATT_OPCODE_READ_RESPONSE
+                                                : BT_ATT_OPCODE_READ_BLOB_RESPONSE;
+
+    if (opcode != expected)
+    {
+        complete(client, BT_GATT_CLIENT_ERROR_PROTOCOL, 0);
+        return;
+    }
+    if (params_len > sizeof(client->result.value) - client->result_len)
     {
         complete(client, BT_GATT_CLIENT_ERROR_TOO_LARGE, 0);
         return;
     }
 
     if (params_len > 0)
-        memcpy(client->result.value, params, params_len);
-    client->result_len = params_len;
+        memcpy(client->result.value + client->result_len, params, params_len);
+    client->result_len += params_len;
+    if (params_len == (size_t)(client->mtu - 1u))
+    {
+        if (client->result_len > UINT16_MAX)
+        {
+            complete(client, BT_GATT_CLIENT_ERROR_TOO_LARGE, 0);
+            return;
+        }
+        issue_current_request(client, now_us);
+        return;
+    }
     complete(client, BT_GATT_CLIENT_OK, 0);
 }
 
@@ -213,7 +291,8 @@ static void handle_write_response(struct bt_gatt_client *client, uint8_t opcode,
     complete(client, BT_GATT_CLIENT_OK, 0);
 }
 
-static void handle_response(struct bt_gatt_client *client, const uint8_t *data, size_t len)
+static void handle_response(struct bt_gatt_client *client, const uint8_t *data, size_t len,
+                            uint64_t now_us)
 {
     uint8_t opcode;
     const uint8_t *params;
@@ -221,6 +300,7 @@ static void handle_response(struct bt_gatt_client *client, const uint8_t *data, 
 
     if (len < 1)
         return;
+    client->event_now_us = now_us;
 
     opcode = data[0];
     params = data + 1;
@@ -269,10 +349,18 @@ static void handle_response(struct bt_gatt_client *client, const uint8_t *data, 
             return;
         }
         if ((client->op == BT_GATT_CLIENT_OP_DISCOVER_SERVICES ||
-             client->op == BT_GATT_CLIENT_OP_DISCOVER_CHARACTERISTICS) &&
+             client->op == BT_GATT_CLIENT_OP_DISCOVER_CHARACTERISTICS ||
+             client->op == BT_GATT_CLIENT_OP_DISCOVER_DESCRIPTORS) &&
             err.error_code == BT_ATT_ERROR_ATTRIBUTE_NOT_FOUND)
         {
             /* Normal termination: no more results, not a failure. */
+            complete(client, BT_GATT_CLIENT_OK, 0);
+            return;
+        }
+        if (client->op == BT_GATT_CLIENT_OP_READ && client->result_len != 0 &&
+            err.request_opcode == BT_ATT_OPCODE_READ_BLOB_REQUEST &&
+            err.error_code == BT_ATT_ERROR_INVALID_OFFSET)
+        {
             complete(client, BT_GATT_CLIENT_OK, 0);
             return;
         }
@@ -283,13 +371,16 @@ static void handle_response(struct bt_gatt_client *client, const uint8_t *data, 
     switch (client->op)
     {
     case BT_GATT_CLIENT_OP_DISCOVER_SERVICES:
-        handle_discover_services_response(client, opcode, params, params_len);
+        handle_discover_services_response(client, opcode, params, params_len, now_us);
         break;
     case BT_GATT_CLIENT_OP_DISCOVER_CHARACTERISTICS:
-        handle_discover_characteristics_response(client, opcode, params, params_len);
+        handle_discover_characteristics_response(client, opcode, params, params_len, now_us);
+        break;
+    case BT_GATT_CLIENT_OP_DISCOVER_DESCRIPTORS:
+        handle_discover_descriptors_response(client, opcode, params, params_len, now_us);
         break;
     case BT_GATT_CLIENT_OP_READ:
-        handle_read_response(client, opcode, params, params_len);
+        handle_read_response(client, opcode, params, params_len, now_us);
         break;
     case BT_GATT_CLIENT_OP_WRITE:
         handle_write_response(client, opcode, params, params_len);
@@ -299,7 +390,7 @@ static void handle_response(struct bt_gatt_client *client, const uint8_t *data, 
     }
 }
 
-static void issue_current_request(struct bt_gatt_client *client)
+static void issue_current_request(struct bt_gatt_client *client, uint64_t now_us)
 {
     uint8_t buf[3 + BT_GATT_CLIENT_MAX_VALUE_LEN];
     struct bt_buf_writer w;
@@ -322,8 +413,16 @@ static void issue_current_request(struct bt_gatt_client *client)
                                                   client->discover_range_end,
                                                   BT_GATT_UUID_CHARACTERISTIC);
         break;
+    case BT_GATT_CLIENT_OP_DISCOVER_DESCRIPTORS:
+        st = bt_att_encode_find_information_request(&w, client->pending_handle,
+                                                     client->discover_range_end);
+        break;
     case BT_GATT_CLIENT_OP_READ:
-        st = bt_att_encode_read_request(&w, client->pending_handle);
+        if (client->result_len == 0)
+            st = bt_att_encode_read_request(&w, client->pending_handle);
+        else
+            st = bt_att_encode_read_blob_request(&w, client->pending_handle,
+                                                  (uint16_t)client->result_len);
         break;
     case BT_GATT_CLIENT_OP_WRITE:
         st = bt_att_encode_write_request(&w, client->pending_handle, client->result.value,
@@ -347,7 +446,10 @@ static void issue_current_request(struct bt_gatt_client *client)
             handle_mtu_response(client, 0, NULL, 0);
         else
             complete(client, BT_GATT_CLIENT_ERROR_CLOSED, 0);
+        return;
     }
+
+    client->request_deadline_us = request_deadline(now_us);
 }
 
 static void on_l2cap_event(struct bt_l2cap_channel_event_info *info, void *user_data)
@@ -360,7 +462,7 @@ static void on_l2cap_event(struct bt_l2cap_channel_event_info *info, void *user_
         client->channel_ready = true;
         client->busy = true;
         client->op = BT_GATT_CLIENT_OP_MTU;
-        issue_current_request(client);
+        issue_current_request(client, client->connect_started_us);
         break;
 
     case BT_L2CAP_CHANNEL_EVENT_CLOSED:
@@ -380,7 +482,7 @@ static void on_l2cap_event(struct bt_l2cap_channel_event_info *info, void *user_
         break;
 
     case BT_L2CAP_CHANNEL_EVENT_DATA:
-        handle_response(client, info->data, info->data_len);
+        handle_response(client, info->data, info->data_len, info->now_us);
         break;
     }
 }
@@ -393,10 +495,11 @@ void bt_gatt_client_init(struct bt_gatt_client *client, struct bt_l2cap_channel_
 }
 
 bt_status_t bt_gatt_client_connect(struct bt_gatt_client *client, bt_gatt_client_connect_fn on_connect,
-                                    void *user_data)
+                                    void *user_data, uint64_t now_us)
 {
     client->on_connect = on_connect;
     client->connect_user_data = user_data;
+    client->connect_started_us = now_us;
 
     return bt_l2cap_channel_manager_open_fixed(client->l2cap, BT_L2CAP_CID_ATT, on_l2cap_event,
                                                 client);
@@ -418,7 +521,7 @@ void bt_gatt_client_set_notify_handler(struct bt_gatt_client *client, bt_gatt_cl
 
 bt_status_t bt_gatt_client_discover_services(struct bt_gatt_client *client,
                                               bt_gatt_client_complete_fn on_complete,
-                                              void *user_data)
+                                              void *user_data, uint64_t now_us)
 {
     if (!client->channel_ready || client->busy)
         return BT_ERR_INVALID_ARGUMENT;
@@ -431,7 +534,7 @@ bt_status_t bt_gatt_client_discover_services(struct bt_gatt_client *client,
     client->on_complete = on_complete;
     client->complete_user_data = user_data;
 
-    issue_current_request(client);
+    issue_current_request(client, now_us);
     return BT_OK;
 }
 
@@ -439,7 +542,7 @@ bt_status_t bt_gatt_client_discover_characteristics(struct bt_gatt_client *clien
                                                       uint16_t service_start_handle,
                                                       uint16_t service_end_handle,
                                                       bt_gatt_client_complete_fn on_complete,
-                                                      void *user_data)
+                                                      void *user_data, uint64_t now_us)
 {
     if (!client->channel_ready || client->busy)
         return BT_ERR_INVALID_ARGUMENT;
@@ -452,12 +555,13 @@ bt_status_t bt_gatt_client_discover_characteristics(struct bt_gatt_client *clien
     client->on_complete = on_complete;
     client->complete_user_data = user_data;
 
-    issue_current_request(client);
+    issue_current_request(client, now_us);
     return BT_OK;
 }
 
 bt_status_t bt_gatt_client_read(struct bt_gatt_client *client, uint16_t handle,
-                                 bt_gatt_client_complete_fn on_complete, void *user_data)
+                                 bt_gatt_client_complete_fn on_complete, void *user_data,
+                                 uint64_t now_us)
 {
     if (!client->channel_ready || client->busy)
         return BT_ERR_INVALID_ARGUMENT;
@@ -469,13 +573,34 @@ bt_status_t bt_gatt_client_read(struct bt_gatt_client *client, uint16_t handle,
     client->on_complete = on_complete;
     client->complete_user_data = user_data;
 
-    issue_current_request(client);
+    issue_current_request(client, now_us);
+    return BT_OK;
+}
+
+bt_status_t bt_gatt_client_discover_descriptors(struct bt_gatt_client *client,
+                                                 uint16_t start_handle,
+                                                 uint16_t end_handle,
+                                                 bt_gatt_client_complete_fn on_complete,
+                                                 void *user_data, uint64_t now_us)
+{
+    if (!client->channel_ready || client->busy || start_handle == 0 ||
+        start_handle > end_handle)
+        return BT_ERR_INVALID_ARGUMENT;
+    client->busy = true;
+    client->op = BT_GATT_CLIENT_OP_DISCOVER_DESCRIPTORS;
+    client->pending_handle = start_handle;
+    client->discover_range_end = end_handle;
+    client->result_count = 0;
+    client->on_complete = on_complete;
+    client->complete_user_data = user_data;
+    issue_current_request(client, now_us);
     return BT_OK;
 }
 
 bt_status_t bt_gatt_client_write(struct bt_gatt_client *client, uint16_t handle,
                                   const uint8_t *value, size_t value_len,
-                                  bt_gatt_client_complete_fn on_complete, void *user_data)
+                                  bt_gatt_client_complete_fn on_complete, void *user_data,
+                                  uint64_t now_us)
 {
     if (!client->channel_ready || client->busy)
         return BT_ERR_INVALID_ARGUMENT;
@@ -491,6 +616,17 @@ bt_status_t bt_gatt_client_write(struct bt_gatt_client *client, uint16_t handle,
     client->on_complete = on_complete;
     client->complete_user_data = user_data;
 
-    issue_current_request(client);
+    issue_current_request(client, now_us);
     return BT_OK;
+}
+
+void bt_gatt_client_tick(struct bt_gatt_client *client, uint64_t now_us)
+{
+    if (!client->busy || client->request_deadline_us == 0 || now_us < client->request_deadline_us)
+        return;
+
+    if (client->on_connect != NULL)
+        handle_mtu_response(client, 0, NULL, 0); /* optional MTU exchange timed out */
+    else
+        complete(client, BT_GATT_CLIENT_ERROR_TIMEOUT, 0);
 }

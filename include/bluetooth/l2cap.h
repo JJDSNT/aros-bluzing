@@ -15,6 +15,7 @@
 #define BT_L2CAP_CID_SIGNALING_CLASSIC 0x0001u
 #define BT_L2CAP_CID_ATT 0x0004u
 #define BT_L2CAP_CID_SIGNALING_LE 0x0005u
+#define BT_L2CAP_CID_SMP 0x0006u
 #define BT_L2CAP_CID_DYNAMIC_START 0x0040u /* first CID assignable to a new channel */
 
 struct bt_l2cap_header

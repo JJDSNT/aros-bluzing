@@ -303,6 +303,87 @@ static void test_le_adv_report_iter_rejects_wrong_subevent(void)
     BT_CHECK(bt_hci_le_adv_report_iter_init(&it, wire, sizeof(wire)) == BT_ERR_INVALID_ARGUMENT);
 }
 
+static void test_le_security_commands(void)
+{
+    static const uint8_t key[16] = {
+        0xBF, 0x01, 0xFB, 0x9D, 0x4E, 0xF3, 0xBC, 0x36,
+        0xD8, 0x74, 0xF5, 0x39, 0x41, 0x38, 0x68, 0x4C};
+    static const uint8_t plaintext[16] = {
+        0x13, 0x02, 0xF1, 0xE0, 0xDF, 0xCE, 0xBD, 0xAC,
+        0x79, 0x68, 0x57, 0x46, 0x35, 0x24, 0x13, 0x02};
+    uint8_t buf[80];
+    uint8_t random[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    uint8_t x[32] = {0};
+    uint8_t y[32] = {0};
+    struct bt_buf_writer w;
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_encrypt(&w, key, plaintext) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 35);
+    BT_CHECK(buf[0] == 0x17 && buf[1] == 0x20 && buf[2] == 32);
+    BT_CHECK(buf[3] == 0xBF && buf[18] == 0x4C && buf[19] == 0x13 && buf[34] == 0x02);
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_rand(&w) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 3 && buf[0] == 0x18 && buf[1] == 0x20);
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_enable_encryption(&w, 0x0041, random, 0x1234, key) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 31);
+    BT_CHECK(buf[0] == 0x19 && buf[1] == 0x20 && buf[2] == 28);
+    BT_CHECK(buf[3] == 0x41 && buf[4] == 0x00);
+    BT_CHECK(buf[13] == 0x34 && buf[14] == 0x12);
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_read_local_p256_public_key(&w) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 3 && buf[0] == 0x25 && buf[1] == 0x20);
+
+    bt_buf_writer_init(&w, buf, sizeof(buf));
+    BT_CHECK(bt_hci_encode_le_generate_dhkey(&w, x, y) == BT_OK);
+    BT_CHECK(bt_buf_writer_len(&w) == 67 && buf[0] == 0x26 && buf[1] == 0x20 && buf[2] == 64);
+}
+
+static void test_le_security_returns_and_p256_events(void)
+{
+    uint8_t encrypt_return[17] = {0};
+    uint8_t rand_return[9] = {0};
+    uint8_t public_event[66] = {0};
+    uint8_t dhkey_event[34] = {0};
+    uint8_t status;
+    uint8_t value16[16];
+    uint8_t value8[8];
+    const uint8_t *dhkey;
+    struct bt_hci_le_p256_public_key_complete public_key;
+
+    encrypt_return[0] = 0;
+    encrypt_return[16] = 0xAA;
+    BT_CHECK(bt_hci_parse_le_encrypt_return(encrypt_return, sizeof(encrypt_return), &status,
+                                             value16) == BT_OK);
+    BT_CHECK(status == 0 && value16[15] == 0xAA);
+    rand_return[0] = 0;
+    rand_return[8] = 0xBB;
+    BT_CHECK(bt_hci_parse_le_rand_return(rand_return, sizeof(rand_return), &status, value8) == BT_OK);
+    BT_CHECK(value8[7] == 0xBB);
+
+    public_event[0] = BT_HCI_LE_META_SUBEVENT_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE;
+    public_event[1] = 0;
+    public_event[2] = 0x11;
+    public_event[34] = 0x22;
+    BT_CHECK(bt_hci_parse_le_p256_public_key_complete(public_event, sizeof(public_event),
+                                                       &public_key) == BT_OK);
+    BT_CHECK(public_key.status == 0 && public_key.x[0] == 0x11 && public_key.y[0] == 0x22);
+
+    dhkey_event[0] = BT_HCI_LE_META_SUBEVENT_GENERATE_DHKEY_COMPLETE;
+    dhkey_event[1] = 0;
+    dhkey_event[2] = 0xCC;
+    BT_CHECK(bt_hci_parse_le_generate_dhkey_complete(dhkey_event, sizeof(dhkey_event),
+                                                      &status, &dhkey) == BT_OK);
+    BT_CHECK(status == 0 && dhkey[0] == 0xCC);
+    BT_CHECK(bt_hci_parse_le_generate_dhkey_complete(dhkey_event, sizeof(dhkey_event) - 1,
+                                                      &status, &dhkey) ==
+              BT_ERR_INVALID_ARGUMENT);
+}
+
 void run_hci_tests(void)
 {
     test_opcode_packing();
@@ -324,4 +405,6 @@ void run_hci_tests(void)
     test_encode_le_scan();
     test_le_adv_report_iter();
     test_le_adv_report_iter_rejects_wrong_subevent();
+    test_le_security_commands();
+    test_le_security_returns_and_p256_events();
 }

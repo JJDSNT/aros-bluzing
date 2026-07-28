@@ -43,6 +43,50 @@ bt_status_t bt_att_parse_exchange_mtu_response(const uint8_t *params, size_t par
     return bt_buf_reader_read_le16(&r, out_server_rx_mtu);
 }
 
+bt_status_t bt_att_encode_find_information_request(struct bt_buf_writer *w,
+                                                    uint16_t starting_handle,
+                                                    uint16_t ending_handle)
+{
+    bt_status_t st;
+
+    st = bt_buf_writer_write_u8(w, BT_ATT_OPCODE_FIND_INFORMATION_REQUEST);
+    if (st == BT_OK)
+        st = bt_buf_writer_write_le16(w, starting_handle);
+    return st == BT_OK ? bt_buf_writer_write_le16(w, ending_handle) : st;
+}
+
+bt_status_t bt_att_find_information_response_iter_init(
+    struct bt_att_find_information_iter *it, const uint8_t *params, size_t params_len)
+{
+    uint8_t format;
+
+    if (it == NULL || params == NULL || params_len < 1)
+        return BT_ERR_INVALID_ARGUMENT;
+    bt_buf_reader_init(&it->r, params, params_len);
+    if (bt_buf_reader_read_u8(&it->r, &format) != BT_OK || (format != 1 && format != 2))
+        return BT_ERR_INVALID_ARGUMENT;
+    it->entry_len = format == 1 ? 4 : 18;
+    if (bt_buf_reader_remaining(&it->r) == 0 ||
+        bt_buf_reader_remaining(&it->r) % it->entry_len != 0)
+        return BT_ERR_INVALID_ARGUMENT;
+    return BT_OK;
+}
+
+bt_status_t bt_att_find_information_response_iter_next(
+    struct bt_att_find_information_iter *it, struct bt_att_information_entry *out)
+{
+    if (it == NULL || out == NULL)
+        return BT_ERR_INVALID_ARGUMENT;
+    if (bt_buf_reader_remaining(&it->r) == 0)
+        return BT_ERR_BUFFER_UNDERFLOW;
+    if (bt_buf_reader_read_le16(&it->r, &out->handle) != BT_OK)
+        return BT_ERR_BUFFER_UNDERFLOW;
+    out->uuid_len = (uint8_t)(it->entry_len - 2);
+    out->uuid = bt_buf_reader_peek(&it->r, out->uuid_len);
+    return out->uuid == NULL ? BT_ERR_BUFFER_UNDERFLOW
+                             : bt_buf_reader_skip(&it->r, out->uuid_len);
+}
+
 bt_status_t bt_att_encode_read_by_group_type_request(struct bt_buf_writer *w,
                                                        uint16_t starting_handle,
                                                        uint16_t ending_handle,
@@ -182,6 +226,17 @@ bt_status_t bt_att_encode_read_request(struct bt_buf_writer *w, uint16_t handle)
         return st;
 
     return bt_buf_writer_write_le16(w, handle);
+}
+
+bt_status_t bt_att_encode_read_blob_request(struct bt_buf_writer *w, uint16_t handle,
+                                             uint16_t value_offset)
+{
+    bt_status_t st;
+
+    st = bt_buf_writer_write_u8(w, BT_ATT_OPCODE_READ_BLOB_REQUEST);
+    if (st == BT_OK)
+        st = bt_buf_writer_write_le16(w, handle);
+    return st == BT_OK ? bt_buf_writer_write_le16(w, value_offset) : st;
 }
 
 bt_status_t bt_att_encode_write_request(struct bt_buf_writer *w, uint16_t handle,

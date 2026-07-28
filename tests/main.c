@@ -17,6 +17,13 @@
 #include "sdp/test_sdp_client.h"
 #include "att/test_att.h"
 #include "gatt/test_gatt_client.h"
+#include "smp/test_smp.h"
+#include "security/test_bond_store.h"
+#include "security/test_smp_crypto.h"
+#include "security/test_smp_pairing.h"
+#include "security/test_smp_manager.h"
+#include "hid/test_hid_report.h"
+#include "hid/test_hogp_client.h"
 
 #include <stdio.h>
 
@@ -40,6 +47,13 @@ int main(void)
     run_sdp_client_tests();
     run_att_tests();
     run_gatt_client_tests();
+    run_smp_tests();
+    run_bond_store_tests();
+    run_smp_crypto_tests();
+    run_smp_pairing_tests();
+    run_smp_manager_tests();
+    run_hid_report_tests();
+    run_hogp_client_tests();
 
     printf("%d/%d checks passed\n", bt_test_count - bt_test_failures, bt_test_count);
 
