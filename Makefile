@@ -7,7 +7,7 @@ CORE_SRC := core/buffer/endian.c core/buffer/buffer.c protocols/hci/hci.c \
             core/controller/controller.c core/addr/addr.c core/device/device_registry.c \
             protocols/l2cap/l2cap.c protocols/l2cap/signaling.c \
             protocols/l2cap/channel_manager.c protocols/sdp/sdp.c \
-            protocols/sdp/sdp_client.c
+            protocols/sdp/sdp_client.c protocols/att/att.c
 PORT_SRC := ports/test-host/virtual_transport/virtual_transport.c
 TEST_SRC := tests/main.c tests/support/test.c tests/endian/test_endian.c \
             tests/buffer/test_buffer.c tests/hci/test_hci.c \
@@ -17,7 +17,7 @@ TEST_SRC := tests/main.c tests/support/test.c tests/endian/test_endian.c \
             tests/addr/test_addr.c tests/device/test_device_registry.c \
             tests/discovery/test_discovery.c tests/l2cap/test_l2cap.c \
             tests/l2cap/test_signaling.c tests/l2cap/test_channel.c \
-            tests/sdp/test_sdp.c tests/sdp/test_sdp_client.c
+            tests/sdp/test_sdp.c tests/sdp/test_sdp_client.c tests/att/test_att.c
 
 BUILD := build
 

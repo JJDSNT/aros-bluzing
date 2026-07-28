@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- **Fase 6, parte 1 completa (SDP)**: codec + cliente de verdade, com loop de continuation state (inclusive o caso mais delicado: resposta de atributo partida no meio do stream de bytes de um único Data Element, não alinhada a fronteira de elemento). Próximo passo possível: GATT/ATT (LE), ou montar a Bluetooth Manager Task/`bt_platform_ops` para tocar AROS de verdade.
+- **Fase 6, parte 2 em andamento (ATT/GATT, LE)**: canal fixo L2CAP (fecha lacuna antiga) + codec ATT prontos e testados. **Falta o cliente GATT** (orquestração sobre o canal ATT fixo: MTU exchange, discovery de serviços/características, read/write, notificações) — mesmo padrão usado para fechar o cliente SDP.
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -51,8 +51,11 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 - **Reduções de escopo documentadas no código** (não são bugs, são decisões deliberadas): (1) só o papel de iniciador é implementado — responder a uma Connection Request recebida do peer (papel de aceitador) não existe ainda; (2) canais fixos LE (ATT, CID 0x0004, que não passam por handshake de conexão) não estão conectados ao gerenciador de canais — só canais orientados a conexão via Connection Request funcionam hoje.
 - [x] **Fase 6, parte 1 (SDP, só codec)**: `bluetooth/sdp.h` + `protocols/sdp/sdp.c` — header de PDU (big-endian, diferente de HCI/L2CAP que são little-endian — `project.md` já alertava para isso), Data Elements (Nil/UInt/UUID16/UUID128/Sequence aninhável, com iterator), Service Search Request/Response e Service Attribute Request/Response com continuation state. Redução de escopo documentada: tipos não usados (SInt/Text/Bool/Alternative/URL/UUID32) não implementados; continuation state limitado a 16 bytes.
 - [x] **Fase 6, parte 1b (cliente SDP)**: `bluetooth/sdp_client.h` + `protocols/sdp/sdp_client.c` — usa `bt_l2cap_channel_manager` para abrir canal ao `BT_SDP_PSM`, `bt_sdp_client_search`/`get_attributes` orquestram request→resposta→(se houver continuation) reenvio automático com o continuation state, até completar. Trata corretamente a diferença entre continuation em Service Search (concatenação simples de handles) e em Service Attribute (os bytes crus são uma única codificação de Data Element partida no meio — só é seguro fazer parse depois de remontar tudo). Buffer de resultado de tamanho fixo (`BT_SDP_CLIENT_MAX_RESULT`), erro dedicado se estourar. 968 checks.
-- Testes: 968 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Papel de aceitador L2CAP (responder Connection Request) e canais fixos LE (ATT) — gaps conhecidos, não iniciados.
+- [x] **Canal fixo L2CAP** (`bt_l2cap_channel_manager_open_fixed`): registra CID fixo (ex. `BT_L2CAP_CID_ATT`) como já `OPEN`, sem handshake de conexão/config, sem Disconnection Request no close (fecha a lacuna registrada antes).
+- [x] **Codec ATT** (`bluetooth/att.h` + `protocols/att/att.c`): Error Response, Exchange MTU, Read By Group Type (discovery de serviços), Read By Type (discovery de características), Read/Write Request, Handle Value Notification/Confirmation. Só papel de cliente (servidor é "posteriormente" no `project.md`). ATT é little-endian (ao contrário de SDP) — `project.md` já alertava para essa divisão.
+- Testes: 1031 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Cliente GATT de verdade (orquestração sobre o canal ATT fixo, análogo ao cliente SDP) — o codec está pronto, falta a orquestração.
+- [ ] Papel de aceitador L2CAP (responder Connection Request) — gap conhecido, não iniciado.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).

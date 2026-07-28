@@ -1,0 +1,131 @@
+#ifndef BLUETOOTH_ATT_H
+#define BLUETOOTH_ATT_H
+
+#include <bluetooth/buffer.h>
+#include <bluetooth/status.h>
+#include <bluetooth/types.h>
+
+/*
+ * ATT (Attribute Protocol), project.md Fase 6 (LE side). Unlike SDP, ATT
+ * integers are little-endian (matching HCI/L2CAP) -- this and SDP are the
+ * two ends of the endianness split project.md calls out explicitly.
+ *
+ * Scope reduction, documented: client role only (encode requests, parse
+ * responses/server-initiated notifications) -- no server-side encode of
+ * responses or parsing of requests, since project.md itself defers "GATT
+ * Server" to later work. Only the request/response pairs a basic GATT
+ * Client needs are covered: MTU exchange, primary service discovery
+ * (Read By Group Type), characteristic discovery (Read By Type), Read,
+ * Write, and Handle Value Notification/Indication. Find Information and
+ * Find By Type Value (descriptor discovery, some LE-only lookups) aren't
+ * implemented yet. Attribute Type fields in requests are always 16-bit
+ * UUIDs here (every GATT declaration type is SIG-defined and 16-bit);
+ * 128-bit UUIDs appearing *inside* a response's opaque value bytes are
+ * unaffected and are the caller's concern to interpret.
+ */
+
+#define BT_ATT_OPCODE_ERROR_RESPONSE 0x01u
+#define BT_ATT_OPCODE_EXCHANGE_MTU_REQUEST 0x02u
+#define BT_ATT_OPCODE_EXCHANGE_MTU_RESPONSE 0x03u
+#define BT_ATT_OPCODE_READ_BY_TYPE_REQUEST 0x08u
+#define BT_ATT_OPCODE_READ_BY_TYPE_RESPONSE 0x09u
+#define BT_ATT_OPCODE_READ_REQUEST 0x0Au
+#define BT_ATT_OPCODE_READ_RESPONSE 0x0Bu
+#define BT_ATT_OPCODE_READ_BY_GROUP_TYPE_REQUEST 0x10u
+#define BT_ATT_OPCODE_READ_BY_GROUP_TYPE_RESPONSE 0x11u
+#define BT_ATT_OPCODE_WRITE_REQUEST 0x12u
+#define BT_ATT_OPCODE_WRITE_RESPONSE 0x13u
+#define BT_ATT_OPCODE_HANDLE_VALUE_NOTIFICATION 0x1Bu
+#define BT_ATT_OPCODE_HANDLE_VALUE_INDICATION 0x1Du
+#define BT_ATT_OPCODE_HANDLE_VALUE_CONFIRMATION 0x1Eu
+
+#define BT_ATT_DEFAULT_MTU 23 /* spec default before any Exchange MTU */
+
+#define BT_GATT_UUID_PRIMARY_SERVICE 0x2800u
+#define BT_GATT_UUID_CHARACTERISTIC 0x2803u
+
+struct bt_att_error_response
+{
+    uint8_t request_opcode;
+    uint16_t handle_in_error;
+    uint8_t error_code;
+};
+
+bt_status_t bt_att_parse_error_response(const uint8_t *params, size_t params_len,
+                                         struct bt_att_error_response *out);
+
+bt_status_t bt_att_encode_exchange_mtu_request(struct bt_buf_writer *w, uint16_t client_rx_mtu);
+bt_status_t bt_att_parse_exchange_mtu_response(const uint8_t *params, size_t params_len,
+                                                uint16_t *out_server_rx_mtu);
+
+/* Read By Group Type: primary/secondary service discovery. */
+bt_status_t bt_att_encode_read_by_group_type_request(struct bt_buf_writer *w,
+                                                       uint16_t starting_handle,
+                                                       uint16_t ending_handle,
+                                                       uint16_t group_type_uuid16);
+
+struct bt_att_group_entry
+{
+    uint16_t handle;
+    uint16_t end_group_handle;
+    const uint8_t *value;
+    uint8_t value_len;
+};
+
+struct bt_att_group_type_iter
+{
+    struct bt_buf_reader r;
+    uint8_t entry_len; /* Length field from the response: 4 + value_len */
+};
+
+bt_status_t bt_att_read_by_group_type_response_iter_init(struct bt_att_group_type_iter *it,
+                                                           const uint8_t *params, size_t params_len);
+/* Returns BT_ERR_BUFFER_UNDERFLOW once exhausted (not a real error). */
+bt_status_t bt_att_read_by_group_type_response_iter_next(struct bt_att_group_type_iter *it,
+                                                           struct bt_att_group_entry *out);
+
+/* Read By Type: characteristic discovery (type=BT_GATT_UUID_CHARACTERISTIC)
+ * and generic attribute-by-type lookups within a handle range. */
+bt_status_t bt_att_encode_read_by_type_request(struct bt_buf_writer *w, uint16_t starting_handle,
+                                                uint16_t ending_handle, uint16_t attribute_type_uuid16);
+
+struct bt_att_type_entry
+{
+    uint16_t handle;
+    const uint8_t *value;
+    uint8_t value_len;
+};
+
+struct bt_att_read_by_type_iter
+{
+    struct bt_buf_reader r;
+    uint8_t entry_len; /* Length field from the response: 2 + value_len */
+};
+
+bt_status_t bt_att_read_by_type_response_iter_init(struct bt_att_read_by_type_iter *it,
+                                                     const uint8_t *params, size_t params_len);
+bt_status_t bt_att_read_by_type_response_iter_next(struct bt_att_read_by_type_iter *it,
+                                                     struct bt_att_type_entry *out);
+
+bt_status_t bt_att_encode_read_request(struct bt_buf_writer *w, uint16_t handle);
+/* Read Response has no fixed structure beyond "the rest of the PDU is the
+ * value" -- callers read params directly once the opcode is confirmed. */
+
+bt_status_t bt_att_encode_write_request(struct bt_buf_writer *w, uint16_t handle,
+                                         const uint8_t *value, size_t value_len);
+/* Write Response has no parameters at all -- confirming the opcode is enough. */
+
+struct bt_att_handle_value
+{
+    uint16_t handle;
+    const uint8_t *value;
+    size_t value_len;
+};
+
+/* Shared layout for Handle Value Notification and Handle Value Indication. */
+bt_status_t bt_att_parse_handle_value(const uint8_t *params, size_t params_len,
+                                       struct bt_att_handle_value *out);
+
+bt_status_t bt_att_encode_handle_value_confirmation(struct bt_buf_writer *w);
+
+#endif /* BLUETOOTH_ATT_H */

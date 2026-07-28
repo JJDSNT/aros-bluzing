@@ -446,6 +446,7 @@ bt_status_t bt_l2cap_channel_manager_open(struct bt_l2cap_channel_manager *mgr, 
     local_cid = alloc_local_cid(mgr);
 
     chan->state = BT_L2CAP_CHAN_WAIT_CONNECT_RSP;
+    chan->is_fixed = false;
     chan->psm = psm;
     chan->local_cid = local_cid;
     chan->remote_cid = 0;
@@ -478,6 +479,36 @@ bt_status_t bt_l2cap_channel_manager_open(struct bt_l2cap_channel_manager *mgr, 
     return BT_OK;
 }
 
+bt_status_t bt_l2cap_channel_manager_open_fixed(struct bt_l2cap_channel_manager *mgr, uint16_t cid,
+                                                 bt_l2cap_channel_event_fn on_event,
+                                                 void *user_data)
+{
+    struct bt_l2cap_channel *chan;
+
+    if (find_channel_by_local_cid(mgr, cid) != NULL)
+        return BT_ERR_INVALID_ARGUMENT; /* already registered */
+
+    chan = find_free_channel(mgr);
+    if (chan == NULL)
+        return BT_ERR_NO_RESOURCES;
+
+    chan->is_fixed = true;
+    chan->psm = 0;
+    chan->local_cid = cid;
+    chan->remote_cid = cid;
+    chan->local_mtu = BT_L2CAP_DEFAULT_MTU;
+    chan->remote_mtu = BT_L2CAP_DEFAULT_MTU;
+    chan->outbound_config_done = true;
+    chan->inbound_config_done = true;
+    chan->pending_identifier = 0;
+    chan->on_event = on_event;
+    chan->user_data = user_data;
+    chan->state = BT_L2CAP_CHAN_OPEN;
+
+    fire_opened(chan);
+    return BT_OK;
+}
+
 void bt_l2cap_channel_manager_close(struct bt_l2cap_channel_manager *mgr, uint16_t local_cid,
                                      uint64_t now_us)
 {
@@ -488,7 +519,7 @@ void bt_l2cap_channel_manager_close(struct bt_l2cap_channel_manager *mgr, uint16
     if (chan == NULL)
         return;
 
-    if (chan->state == BT_L2CAP_CHAN_OPEN)
+    if (chan->state == BT_L2CAP_CHAN_OPEN && !chan->is_fixed)
     {
         chan->pending_identifier = alloc_identifier(mgr);
         chan->state = BT_L2CAP_CHAN_WAIT_DISCONNECT_RSP;

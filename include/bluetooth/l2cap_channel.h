@@ -90,6 +90,7 @@ struct bt_l2cap_channel
 {
     struct bt_l2cap_channel_manager *owner;
     enum bt_l2cap_channel_state state;
+    bool is_fixed; /* registered via open_fixed(): no handshake, no on-wire teardown */
     uint16_t psm;
     uint16_t local_cid;
     uint16_t remote_cid;
@@ -131,6 +132,18 @@ bt_status_t bt_l2cap_channel_manager_open(struct bt_l2cap_channel_manager *mgr, 
                                            uint16_t local_mtu, bt_l2cap_channel_event_fn on_event,
                                            void *user_data, uint16_t *out_local_cid,
                                            uint64_t now_us);
+
+/* Registers a fixed channel (e.g. BT_L2CAP_CID_ATT) as immediately OPEN
+ * -- fixed channels exist for as long as the ACL link does, with no
+ * Connection Request/Response or configuration handshake (per spec, not
+ * a shortcut taken here). local_cid == remote_cid == cid always, since
+ * fixed CIDs are the same value on both ends by definition. Fails if the
+ * pool is full or cid is already registered on this manager. Fires
+ * BT_L2CAP_CHANNEL_EVENT_OPENED synchronously before returning, so
+ * callers can treat it uniformly with the async dynamic-channel path. */
+bt_status_t bt_l2cap_channel_manager_open_fixed(struct bt_l2cap_channel_manager *mgr, uint16_t cid,
+                                                 bt_l2cap_channel_event_fn on_event,
+                                                 void *user_data);
 
 /* If OPEN, sends Disconnection Request and waits for the response. If
  * still connecting/configuring, aborts locally right away (project.md's

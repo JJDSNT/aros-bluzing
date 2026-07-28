@@ -625,6 +625,49 @@ static void test_fragmented_data(void)
     BT_CHECK(ft.captured_pdu_len == BT_L2CAP_HEADER_LEN + sizeof(payload));
 }
 
+static void test_fixed_channel_open_and_data(void)
+{
+    struct fake_transport ft;
+    struct bt_l2cap_channel_manager mgr;
+    struct event_log log = {0, 0, 0, BT_L2CAP_CLOSE_LOCAL, {0}, 0};
+    static const uint8_t payload[] = {0xAA, 0xBB, 0xCC};
+
+    fake_transport_init(&ft);
+    bt_l2cap_channel_manager_init(&mgr, &ft.base, 0x0041, BT_L2CAP_CID_SIGNALING_LE, 200);
+
+    /* No handshake at all -- OPEN fires synchronously, right here. */
+    BT_CHECK(bt_l2cap_channel_manager_open_fixed(&mgr, BT_L2CAP_CID_ATT, log_event, &log) == BT_OK);
+    BT_CHECK(log.open_count == 1);
+    BT_CHECK(ft.send_count == 0); /* nothing goes on the wire to establish it */
+
+    const struct bt_l2cap_channel *chan = find_chan(&mgr, BT_L2CAP_CID_ATT);
+    BT_CHECK(chan != NULL);
+    BT_CHECK(chan->state == BT_L2CAP_CHAN_OPEN);
+    BT_CHECK(chan->remote_cid == BT_L2CAP_CID_ATT); /* fixed CIDs match on both ends */
+
+    /* Re-registering the same fixed CID must fail. */
+    BT_CHECK(bt_l2cap_channel_manager_open_fixed(&mgr, BT_L2CAP_CID_ATT, log_event, &log) ==
+              BT_ERR_INVALID_ARGUMENT);
+
+    BT_CHECK(bt_l2cap_channel_manager_send(&mgr, BT_L2CAP_CID_ATT, payload, sizeof(payload), 0) ==
+              BT_OK);
+    BT_CHECK(ft.captured_complete);
+
+    feed_data(&mgr, BT_L2CAP_CID_ATT, payload, sizeof(payload), 10);
+    BT_CHECK(log.data_count == 1);
+    BT_CHECK(log.last_data_len == sizeof(payload));
+
+    /* Closing a fixed channel is purely local -- no Disconnection
+     * Request, since there's no on-wire teardown for a fixed channel. */
+    ft.captured_complete = false;
+    int send_count_before = ft.send_count;
+    bt_l2cap_channel_manager_close(&mgr, BT_L2CAP_CID_ATT, 20);
+    BT_CHECK(log.closed_count == 1);
+    BT_CHECK(log.last_close_reason == BT_L2CAP_CLOSE_LOCAL);
+    BT_CHECK(ft.send_count == send_count_before);
+    BT_CHECK(find_chan(&mgr, BT_L2CAP_CID_ATT) == NULL);
+}
+
 void run_l2cap_channel_tests(void)
 {
     test_open_full_handshake();
@@ -636,4 +679,5 @@ void run_l2cap_channel_tests(void)
     test_timeout_waiting_for_connect_rsp();
     test_pool_exhaustion();
     test_fragmented_data();
+    test_fixed_channel_open_and_data();
 }
