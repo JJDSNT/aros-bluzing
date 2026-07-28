@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- **Fase 6, parte 2 em andamento (ATT/GATT, LE)**: canal fixo L2CAP (fecha lacuna antiga) + codec ATT prontos e testados. **Falta o cliente GATT** (orquestração sobre o canal ATT fixo: MTU exchange, discovery de serviços/características, read/write, notificações) — mesmo padrão usado para fechar o cliente SDP.
+- **Fase 6 completa no escopo definido** (SDP Classic + ATT/GATT LE, ambos com codec e cliente de verdade, testados em host via peers simulados). Falta segurança (SSP/SMP, pairing/bonding, link keys/LTK/IRK/CSRK) da própria Fase 6, e as Fases 7 (HID) e 8 (RFCOMM/perfis) do `project.md`. Também falta a Fase 3 real (`bt_platform_ops` + Bluetooth Manager Task + integração AROS) — continua sem consumidor e sem toolchain AROS disponível neste ambiente para verificar.
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -53,9 +53,10 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 - [x] **Fase 6, parte 1b (cliente SDP)**: `bluetooth/sdp_client.h` + `protocols/sdp/sdp_client.c` — usa `bt_l2cap_channel_manager` para abrir canal ao `BT_SDP_PSM`, `bt_sdp_client_search`/`get_attributes` orquestram request→resposta→(se houver continuation) reenvio automático com o continuation state, até completar. Trata corretamente a diferença entre continuation em Service Search (concatenação simples de handles) e em Service Attribute (os bytes crus são uma única codificação de Data Element partida no meio — só é seguro fazer parse depois de remontar tudo). Buffer de resultado de tamanho fixo (`BT_SDP_CLIENT_MAX_RESULT`), erro dedicado se estourar. 968 checks.
 - [x] **Canal fixo L2CAP** (`bt_l2cap_channel_manager_open_fixed`): registra CID fixo (ex. `BT_L2CAP_CID_ATT`) como já `OPEN`, sem handshake de conexão/config, sem Disconnection Request no close (fecha a lacuna registrada antes).
 - [x] **Codec ATT** (`bluetooth/att.h` + `protocols/att/att.c`): Error Response, Exchange MTU, Read By Group Type (discovery de serviços), Read By Type (discovery de características), Read/Write Request, Handle Value Notification/Confirmation. Só papel de cliente (servidor é "posteriormente" no `project.md`). ATT é little-endian (ao contrário de SDP) — `project.md` já alertava para essa divisão.
-- Testes: 1031 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Cliente GATT de verdade (orquestração sobre o canal ATT fixo, análogo ao cliente SDP) — o codec está pronto, falta a orquestração.
+- [x] **Cliente GATT** (`bluetooth/gatt_client.h` + `protocols/gatt/gatt_client.c`): conecta via canal fixo ATT, negocia MTU (falha na negociação não derruba a conexão — é opcional por spec), `discover_services`/`discover_characteristics` com loop de paginação até esgotar o range ou receber Attribute Not Found (terminação normal do protocolo, não erro), `read`/`write`, notificações/indicações entregues via callback independente do estado "busy" (indicação confirma automaticamente). Resultados em arrays de tamanho fixo (`BT_GATT_CLIENT_MAX_SERVICES`/`_CHARACTERISTICS`), só UUIDs de 16 bits (redução de escopo documentada). Sem timeout próprio por requisição — canal fixo não tem RTX timer de conexão como os canais dinâmicos.
+- Testes: 1162 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
 - [ ] Papel de aceitador L2CAP (responder Connection Request) — gap conhecido, não iniciado.
+- [ ] SMP/SSP (pairing, bonding, LTK/IRK/CSRK/link keys) — resto da Fase 6, não iniciado.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).

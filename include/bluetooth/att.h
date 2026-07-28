@@ -41,6 +41,11 @@
 
 #define BT_ATT_DEFAULT_MTU 23 /* spec default before any Exchange MTU */
 
+/* The one error code a GATT client must treat specially: it's how a
+ * server signals "no more results", the normal way Read By Group
+ * Type/Read By Type discovery loops terminate -- not a real failure. */
+#define BT_ATT_ERROR_ATTRIBUTE_NOT_FOUND 0x0Au
+
 #define BT_GATT_UUID_PRIMARY_SERVICE 0x2800u
 #define BT_GATT_UUID_CHARACTERISTIC 0x2803u
 
