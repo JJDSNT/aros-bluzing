@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- **Fase 5 (L2CAP) em andamento**: codec de PDU (header+CID), fragmentação/remontagem sobre ACL, e codec de sinalização (Connection/Configuration/Disconnection Request-Response, Command Reject) estão prontos e testados. **Falta a máquina de estados do canal orientado a conexão** (lifecycle completo: IDLE→config bidirecional→OPEN→disconnect, com timeouts e tratamento de remoção durante negociação) — é a peça mais complexa restante da fase, ainda não iniciada.
+- **Fase 5 (L2CAP) completa no escopo definido** (com duas reduções de escopo documentadas no próprio código — ver abaixo). Próximo passo: Fase 6 (SDP/GATT/segurança), ou finalmente montar a Bluetooth Manager Task/`bt_platform_ops` para tocar AROS de verdade — a decidir.
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -47,8 +47,10 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
   - `bluetooth/l2cap.h` + `protocols/l2cap/l2cap.c`: header L2CAP (Length+CID); reassembler de fragmentos ACL→PDU L2CAP (`bt_l2cap_reassembler`, tamanho fixo, detecta pacote truncado/comprimento inválido/início-durante-PDU-em-andamento); fragmentador PDU→ACL (`bt_l2cap_fragmenter`).
   - `protocols/l2cap/signaling.c`: codec de sinalização — Connection Request/Response, Configuration Request/Response (só opção MTU, decisão de escopo documentada), Disconnection Request/Response, Command Reject. Parser de config ignora opções desconhecidas em vez de falhar.
   - Testes: round-trip fragmentador↔remontador, PDU com header partido entre fragmentos, pacote truncado (nunca completa, nunca falha falsamente), comprimento inválido/excedente, início de novo PDU abandona o anterior em andamento.
-- Testes: 685 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Fase 5 (L2CAP), parte 2: máquina de estados do canal orientado a conexão (lifecycle, configuração bidirecional, timeouts, remoção durante negociação) e canais fixos LE (ATT/sinalização LE) — ainda não iniciados.
+- [x] **Fase 5 (L2CAP), parte 2**: `bluetooth/l2cap_channel.h` + `protocols/l2cap/channel_manager.c` — máquina de estados de canal orientado a conexão completa: `bt_l2cap_channel_manager_open` (envia Connection Request), configuração bidirecional (dois flags independentes outbound/inbound em vez do sub-diagrama de ~8 estados do spec — redução de escopo documentada no header), `OPEN`, envio/recebimento de dados fragmentados, desconexão local e iniciada pelo peer, timeout por fase via `bt_timer_list` próprio, e **remoção durante negociação** (fechar um canal ainda em `WAIT_CONNECT_RSP`/`CONFIG` limpa localmente sem tráfego na rede, e uma resposta tardia com o identificador antigo é ignorada com segurança — testado explicitamente). 779 checks, `make test` limpo com sanitizers, passou de primeira.
+- **Reduções de escopo documentadas no código** (não são bugs, são decisões deliberadas): (1) só o papel de iniciador é implementado — responder a uma Connection Request recebida do peer (papel de aceitador) não existe ainda; (2) canais fixos LE (ATT, CID 0x0004, que não passam por handshake de conexão) não estão conectados ao gerenciador de canais — só canais orientados a conexão via Connection Request funcionam hoje.
+- Testes: 779 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Papel de aceitador L2CAP (responder Connection Request) e canais fixos LE (ATT) — gaps conhecidos, não iniciados.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).
