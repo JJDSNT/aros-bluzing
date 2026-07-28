@@ -19,6 +19,7 @@ BLUZING_FILES := \
     core/timer/timer \
     core/controller/command_queue \
     core/controller/controller \
+    core/manager/manager \
     core/addr/addr \
     core/device/device_registry \
     core/security/bond_store \

@@ -20,6 +20,7 @@ AROS_SRC := \
     core/timer/timer.c \
     core/controller/command_queue.c \
     core/controller/controller.c \
+    core/manager/manager.c \
     core/addr/addr.c \
     core/device/device_registry.c \
     core/security/bond_store.c \

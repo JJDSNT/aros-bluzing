@@ -4,7 +4,8 @@ SAN_CFLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -g
 
 CORE_SRC := core/buffer/endian.c core/buffer/buffer.c protocols/hci/hci.c \
             core/event/queue.c core/timer/timer.c core/controller/command_queue.c \
-            core/controller/controller.c core/addr/addr.c core/device/device_registry.c \
+            core/controller/controller.c core/manager/manager.c core/addr/addr.c \
+            core/device/device_registry.c \
             protocols/l2cap/l2cap.c protocols/l2cap/signaling.c \
             protocols/l2cap/channel_manager.c protocols/sdp/sdp.c \
             protocols/sdp/sdp_client.c protocols/att/att.c protocols/gatt/gatt_client.c
@@ -23,6 +24,7 @@ TEST_SRC := tests/main.c tests/support/test.c tests/endian/test_endian.c \
             tests/virtual_transport/test_virtual_transport.c \
             tests/queue/test_queue.c tests/timer/test_timer.c \
             tests/controller/test_command_queue.c tests/controller/test_controller.c \
+            tests/manager/test_manager.c \
             tests/addr/test_addr.c tests/device/test_device_registry.c \
             tests/discovery/test_discovery.c tests/l2cap/test_l2cap.c \
             tests/l2cap/test_signaling.c tests/l2cap/test_channel.c \

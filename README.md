@@ -136,9 +136,11 @@ hardware or AROS build required):
   byte order, HID-to-AROS event delivery, and bond storage.
 - **AROS USB transport**: asynchronous HCI command/ACL I/O and driver-delivered event messages over
   the existing `usbbluetooth.device`, designed to be polled by the single-owner Manager Task.
+- **Manager core**: transport lifecycle, receive dispatch, deterministic controller initialization,
+  and timeout progression under one event-loop owner, tested with the virtual controller.
 
-Still pending are the production Bluetooth Manager Task, HID Classic, RFCOMM, audio, persistent bond
-storage in the AROS port, and controller hardware validation. See
+Still pending are the AROS Exec `Wait()`/timer wrapper around the Manager core, HID Classic, RFCOMM,
+audio, persistent bond storage in the AROS port, and controller hardware validation. See
 [`ai-context/status.md`](ai-context/status.md) for the live, detailed tracker (in Portuguese).
 
 ## Contributing
