@@ -1,7 +1,7 @@
 AROS_SOURCE ?= /home/jaime/AROS
-AROS_BUILD_TREE ?= /tmp/aros-build-aarch64-core
+AROS_BUILD_TREE ?= $(abspath $(AROS_SOURCE)/../aros-build-aarch64-core)
 AROS_TOOLCHAIN ?= $(AROS_SOURCE)/toolchain-aarch64
-AROS_SDK ?= /home/jaime/arosbin/AROS-20260727-raspi-aarch64-system/Developer
+AROS_SDK ?= $(AROS_BUILD_TREE)/bin/raspi-aarch64/AROS/Developer
 AROS_TARGET ?= aarch64-unknown-aros
 
 CC := $(AROS_TOOLCHAIN)/bin/clang
