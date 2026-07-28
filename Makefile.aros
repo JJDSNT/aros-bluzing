@@ -39,7 +39,8 @@ AROS_SRC := \
     protocols/smp/smp.c \
     profiles/hogp/hogp_client.c \
     ports/aros/input/input_bridge.c \
-    ports/aros/input/input_device.c
+    ports/aros/input/input_device.c \
+    ports/aros/transport-usb/usb_transport.c
 
 AROS_OBJ := $(addprefix $(AROS_BUILD)/,$(AROS_SRC:.c=.o))
 AROS_LIB := $(AROS_BUILD)/libaros-bluzing.a

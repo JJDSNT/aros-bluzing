@@ -38,10 +38,12 @@ BLUZING_FILES := \
     protocols/smp/smp \
     profiles/hogp/hogp_client \
     ports/aros/input/input_bridge \
-    ports/aros/input/input_device
+    ports/aros/input/input_device \
+    ports/aros/transport-usb/usb_transport
 
 USER_INCLUDES := -I$(BLUZING_ROOT)/include \
-                 -I$(BLUZING_ROOT)/ports/aros/input
+                 -I$(BLUZING_ROOT)/ports/aros/input \
+                 -I$(BLUZING_ROOT)/ports/aros/transport-usb
 USER_CFLAGS := -Wall -Wextra -Werror
 
 %build_linklib mmake=linklibs-arosbluzing \

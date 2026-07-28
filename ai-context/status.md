@@ -77,13 +77,14 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 - [x] **Ponte HID→AROS testável em host** (`bluetooth/aros_input_bridge.h` + `ports/aros/input/input_bridge.c`): converte usages em rawkeys/qualifiers, botões/movimento/roda e teclas multimídia compatíveis com as convenções das classes HID do Poseidon.
 - [x] **Adapter nativo `input.device`** (`ports/aros/input/input_device.c`): ciclo `MsgPort`/`IOStdReq`, `OpenDevice`, `IND_WRITEEVENT` síncrono e teardown; compilado com o Clang AROS para `aarch64-unknown-aros`.
 - [x] **Build e execução AROS**: `Makefile.aros` produz `libaros-bluzing.a` e `aros-bluzing-selftest`; o executável AROS AArch64 foi inserido numa cópia da imagem FAT32 e executado no QEMU/Raspberry Pi 3, com `3/3` testes passando via `DEBUG:`. O `mmakefile.src` mantido na raiz deste repositório é descoberto quando o checkout fica em `AROS/contrib/aros-bluzing`, sem caminhos absolutos, e o target nativo `contrib-aros-bluzing` foi validado numa árvore persistente: instalou `libarosbluzing.a` em `AROS/Developer/lib` e `aros-bluzing-selftest` em `AROS/C`.
+- [x] **Adapter `usbbluetooth.device`** (`ports/aros/transport-usb/`): implementa `bt_hci_transport_ops` sobre a ABI existente do driver, com comandos e ACL TX assíncronos em buffers próprios, ACL RX pendente, eventos `BTHCIEventMsg` via `BTCMD_ADDMSGPORT`, signal mask e `poll` para execução exclusiva pela futura Manager Task. Compila tanto pelo helper quanto pelo MetaMake nativo; hardware real ainda não validado.
 - Testes: 1686 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
 - [ ] Papel de aceitador L2CAP (responder Connection Request) — gap conhecido, não iniciado.
 - [ ] Segurança restante — conectar a máquina SMP ao HCI/event loop e ao `bond_store`, implementar reconexão bonded e os métodos SC Passkey/OOB; SSP Classic e link keys ainda não iniciados.
 - [ ] HID restante — ligar o adapter ao Bluetooth Manager Task do AROS, HIDP Classic, `lowlevel.library`, rumble/Feature Reports específicos e reconexão bonded no port.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
-- [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).
+- [ ] Validar o adapter `usbbluetooth.device` com controlador USB real, incluindo remoção física durante I/O pendente.
 - [ ] Fase 4 em diante: seguir `project.md` sem mudança de plano.
 
 ## Divergências / decisões registradas

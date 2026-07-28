@@ -62,7 +62,8 @@ protocols/            Wire protocol codecs: HCI, L2CAP (PDU framing, ACL fragmen
                       signaling, connection-oriented channels)
 ports/
   test-host/          Host-side test doubles (virtual HCI transport/controller)
-  aros/                AROS input.device adapter, event bridge, and native self-test
+  aros/                AROS input.device and usbbluetooth.device adapters, event bridge,
+                      and native self-test
 tests/                Unit and integration tests, mirroring the source layout
 ai-context/           Investigation notes, architectural decisions, and status tracking
 mmakefile.src          Native AROS MetaMake integration
@@ -133,9 +134,11 @@ hardware or AROS build required):
   Protocol and output reports, plus an AROS `input.device` event adapter.
 - **AROS build validation**: native AArch64 compile/link and an image-booted QEMU self-test covering
   byte order, HID-to-AROS event delivery, and bond storage.
+- **AROS USB transport**: asynchronous HCI command/ACL I/O and driver-delivered event messages over
+  the existing `usbbluetooth.device`, designed to be polled by the single-owner Manager Task.
 
-Still pending are the production Bluetooth Manager Task and controller transport attachment, HID
-Classic, RFCOMM, audio, persistent bond storage in the AROS port, and hardware validation. See
+Still pending are the production Bluetooth Manager Task, HID Classic, RFCOMM, audio, persistent bond
+storage in the AROS port, and controller hardware validation. See
 [`ai-context/status.md`](ai-context/status.md) for the live, detailed tracker (in Portuguese).
 
 ## Contributing
