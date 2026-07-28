@@ -1,0 +1,69 @@
+#ifndef BLUETOOTH_CONTROLLER_H
+#define BLUETOOTH_CONTROLLER_H
+
+#include <bluetooth/command_queue.h>
+#include <bluetooth/hci.h>
+#include <bluetooth/status.h>
+#include <bluetooth/timer.h>
+#include <bluetooth/transport.h>
+#include <bluetooth/types.h>
+
+/*
+ * Drives the deterministic controller bring-up sequence from project.md's
+ * Fase 2 (Reset -> Read Local Version -> Read Local Supported Features ->
+ * Read Buffer Size -> ready), on top of bt_cmdq. One command in flight at
+ * a time, by construction of bt_cmdq itself.
+ *
+ * Owns a private bt_timer_list for its command queue's timeouts. Nothing
+ * else shares timers yet, so this is fine for now; once a real event loop
+ * (Bluetooth Manager Task or test-host equivalent) exists, it will likely
+ * want to own one shared timer list instead.
+ *
+ * Caller is responsible for transport->ops->open() before
+ * bt_controller_start(), and for feeding every received HCI Event to
+ * bt_controller_on_event() (e.g. from the transport's recv callback).
+ */
+
+enum bt_controller_state
+{
+    BT_CONTROLLER_STATE_UNINITIALIZED,
+    BT_CONTROLLER_STATE_RESETTING,
+    BT_CONTROLLER_STATE_READING_VERSION,
+    BT_CONTROLLER_STATE_READING_FEATURES,
+    BT_CONTROLLER_STATE_READING_BUFFER_SIZE,
+    BT_CONTROLLER_STATE_READY,
+    BT_CONTROLLER_STATE_ERROR
+};
+
+struct bt_controller_info
+{
+    struct bt_hci_local_version version;
+    struct bt_hci_local_features features;
+    struct bt_hci_buffer_size buffer_size;
+};
+
+struct bt_controller
+{
+    struct bt_hci_transport *transport;
+    struct bt_timer_list timers;
+    struct bt_cmdq cmdq;
+    enum bt_controller_state state;
+    struct bt_controller_info info;
+};
+
+void bt_controller_init(struct bt_controller *ctrl, struct bt_hci_transport *transport);
+
+/* Submits HCI Reset and begins the bring-up sequence. Fails only if the
+ * controller isn't in BT_CONTROLLER_STATE_UNINITIALIZED, or if the
+ * underlying command queue has no free slot (shouldn't happen this early). */
+bt_status_t bt_controller_start(struct bt_controller *ctrl, uint64_t now_us);
+
+void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, size_t length,
+                             uint64_t now_us);
+
+/* Call periodically (or whenever the owning timer list has something due)
+ * so a stalled bring-up command can time out and move to
+ * BT_CONTROLLER_STATE_ERROR instead of hanging forever. */
+void bt_controller_tick(struct bt_controller *ctrl, uint64_t now_us);
+
+#endif /* BLUETOOTH_CONTROLLER_H */

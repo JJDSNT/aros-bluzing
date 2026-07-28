@@ -6,7 +6,8 @@ typedef enum bt_status
     BT_OK = 0,
     BT_ERR_INVALID_ARGUMENT,
     BT_ERR_BUFFER_OVERFLOW,   /* writer has no room left for the requested data */
-    BT_ERR_BUFFER_UNDERFLOW   /* reader has fewer bytes left than requested */
+    BT_ERR_BUFFER_UNDERFLOW,  /* reader has fewer bytes left than requested */
+    BT_ERR_NO_RESOURCES       /* a fixed-size pool (e.g. command queue slots) is full */
 } bt_status_t;
 
 #endif /* BLUETOOTH_STATUS_H */

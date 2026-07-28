@@ -5,6 +5,8 @@
 #include "virtual_transport/test_virtual_transport.h"
 #include "queue/test_queue.h"
 #include "timer/test_timer.h"
+#include "controller/test_command_queue.h"
+#include "controller/test_controller.h"
 
 #include <stdio.h>
 
@@ -16,6 +18,8 @@ int main(void)
     run_virtual_transport_tests();
     run_queue_tests();
     run_timer_tests();
+    run_command_queue_tests();
+    run_controller_tests();
 
     printf("%d/%d checks passed\n", bt_test_count - bt_test_failures, bt_test_count);
 

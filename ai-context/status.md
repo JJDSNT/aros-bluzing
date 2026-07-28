@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- **"Primeira entrega de código" de `project.md` está completa** (ver "Feito" abaixo). Próximo passo: o que falta de Fase 1 (filas, eventos, timers abstratos) e então Fase 2 (HCI mínimo completo: command complete/status genéricos, controle de créditos, fila de comandos, timeout, estado do controlador).
+- **Fase 2 (HCI mínimo) está completa** para o escopo de bring-up: command complete/status, ACL header, controle de créditos, fila de comandos, timeout, estado do controlador, sequência determinística Reset→Version→Features→BufferSize→Ready. Próximo passo natural: L2CAP (Fase 5) ou aprofundar Fase 2 com discovery (Fase 4) — a decidir com o usuário.
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -29,8 +29,15 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 - [x] Fila intrusiva SPSC (`bluetooth/queue.h`, `core/event/queue.c`) — sem alocação, nó embutido pelo chamador.
 - [x] Lista de timers ordenada por expiração (`bluetooth/timer.h`, `core/timer/timer.c`) — bookkeeping puro e testável com `now_us` explícito, sem depender de relógio real; add/cancel/pop_expired/next_expiry.
 - [x] Interface `bt_platform_ops` declarada (`bluetooth/platform.h`), exatamente como em `project.md`. **Sem implementação ainda** — decisão deliberada: não há consumidor real (a Bluetooth Manager Task não existe) até a Fase 2/porta AROS, então uma implementação de `ports/test-host/platform` ficaria especulativa. Implementar quando algo de fato chamar essa interface.
-- Testes: 337 checks (endian, buffer, HCI encode/parse, transporte virtual, fila, timers), `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Fase 2: HCI mínimo completo (command status, controle de créditos, fila de comandos usando `bt_queue`, timeout usando `bt_timer_list`, estado do controlador como módulo de verdade em `core/controller/`).
+- [x] **Fase 2 (HCI mínimo, escopo de bring-up)**:
+  - `bluetooth/hci.h`: Command Status, cabeçalho ACL, parsers de Read Local Version/Features/Buffer Size.
+  - `bluetooth/command_queue.h` + `core/controller/command_queue.c`: fila de comandos com pool fixo (`BT_CMDQ_MAX_PENDING`), controle de créditos (`Num_HCI_Command_Packets`), timeout por comando via `bt_timer_list`, um comando em voo por vez, múltiplos comandos simultâneos enfileirados corretamente.
+  - `bluetooth/controller.h` + `core/controller/controller.c`: máquina de estados `bt_controller` — Reset → Read Local Version → Read Local Supported Features → Read Buffer Size → READY (ou ERROR em falha/timeout).
+  - Transporte virtual estendido para responder às 3 novas leituras com dados plausíveis.
+  - **Bug real encontrado e corrigido pelo teste de ponta a ponta**: como o transporte virtual responde de forma síncrona (dentro da própria chamada `send_command`), a fila de comandos precisava marcar o comando como outstanding *antes* de chamar o transporte, não depois — senão o processamento recursivo da resposta era sobrescrito pelo código que rodava após a chamada retornar. Corrigido em `command_queue.c`; documentado no código porque qualquer transporte síncrono real teria o mesmo risco.
+- Testes: 451 checks (endian, buffer, HCI encode/parse incl. novos parsers, transporte virtual, fila, timers, command queue com créditos/timeout/comandos simultâneos, sequência completa de inicialização do controlador), `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Fase 4 (discovery Classic/LE) e Fase 5 (L2CAP) — próximos passos possíveis, ainda não iniciados.
+- [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).
 - [ ] Fase 4 em diante: seguir `project.md` sem mudança de plano.
