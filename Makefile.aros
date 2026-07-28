@@ -1,0 +1,75 @@
+AROS_SOURCE ?= /home/jaime/AROS
+AROS_BUILD_TREE ?= /tmp/aros-build-aarch64-core
+AROS_TOOLCHAIN ?= $(AROS_SOURCE)/toolchain-aarch64
+AROS_SDK ?= /home/jaime/arosbin/AROS-20260727-raspi-aarch64-system/Developer
+AROS_TARGET ?= aarch64-unknown-aros
+
+CC := $(AROS_TOOLCHAIN)/bin/clang
+AR := $(AROS_TOOLCHAIN)/bin/llvm-ar
+AROS_BUILD := build-aros/$(AROS_TARGET)
+
+CPPFLAGS := --target=$(AROS_TARGET) --sysroot=$(AROS_SDK) \
+            -Iinclude -Iports/aros/input
+CFLAGS := -std=gnu11 -Wall -Wextra -Werror -ffunction-sections \
+          -fdata-sections
+
+AROS_SRC := \
+    core/buffer/endian.c \
+    core/buffer/buffer.c \
+    core/event/queue.c \
+    core/timer/timer.c \
+    core/controller/command_queue.c \
+    core/controller/controller.c \
+    core/addr/addr.c \
+    core/device/device_registry.c \
+    core/security/bond_store.c \
+    core/security/smp_crypto.c \
+    core/security/smp_pairing.c \
+    core/security/smp_manager.c \
+    core/hid/report_parser.c \
+    core/hid/input.c \
+    protocols/hci/hci.c \
+    protocols/l2cap/l2cap.c \
+    protocols/l2cap/signaling.c \
+    protocols/l2cap/channel_manager.c \
+    protocols/sdp/sdp.c \
+    protocols/sdp/sdp_client.c \
+    protocols/att/att.c \
+    protocols/gatt/gatt_client.c \
+    protocols/smp/smp.c \
+    profiles/hogp/hogp_client.c \
+    ports/aros/input/input_bridge.c \
+    ports/aros/input/input_device.c
+
+AROS_OBJ := $(addprefix $(AROS_BUILD)/,$(AROS_SRC:.c=.o))
+AROS_LIB := $(AROS_BUILD)/libaros-bluzing.a
+SELFTEST_OBJ := $(AROS_BUILD)/ports/aros/selftest/main.o
+SELFTEST := $(AROS_BUILD)/aros-bluzing-selftest
+
+.PHONY: all library selftest clean print-config
+
+all: $(AROS_LIB) $(SELFTEST)
+library: $(AROS_LIB)
+selftest: $(SELFTEST)
+
+print-config:
+	@echo "CC=$(CC)"
+	@echo "AROS_TARGET=$(AROS_TARGET)"
+	@echo "AROS_SDK=$(AROS_SDK)"
+
+$(AROS_LIB): $(AROS_OBJ)
+	@mkdir -p $(@D)
+	$(AR) rcs $@ $^
+
+$(SELFTEST): $(SELFTEST_OBJ) $(AROS_LIB)
+	env PATH='$(AROS_BUILD_TREE)/bin/linux-x86_64/tools:$(PATH)' \
+	    $(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@
+
+$(AROS_BUILD)/%.o: %.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+
+clean:
+	rm -rf build-aros
+
+-include $(AROS_OBJ:.o=.d) $(SELFTEST_OBJ:.o=.d)

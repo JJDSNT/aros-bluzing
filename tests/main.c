@@ -23,7 +23,9 @@
 #include "security/test_smp_pairing.h"
 #include "security/test_smp_manager.h"
 #include "hid/test_hid_report.h"
+#include "hid/test_hid_input.h"
 #include "hid/test_hogp_client.h"
+#include "hid/test_aros_input_bridge.h"
 
 #include <stdio.h>
 
@@ -53,7 +55,9 @@ int main(void)
     run_smp_pairing_tests();
     run_smp_manager_tests();
     run_hid_report_tests();
+    run_hid_input_tests();
     run_hogp_client_tests();
+    run_aros_input_bridge_tests();
 
     printf("%d/%d checks passed\n", bt_test_count - bt_test_failures, bt_test_count);
 

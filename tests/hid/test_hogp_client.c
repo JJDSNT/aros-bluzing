@@ -134,9 +134,12 @@ struct test_log
 {
     int connected;
     int completed;
+    int write_completed;
     enum bt_hogp_client_result result;
     int values;
     struct bt_hid_value value;
+    int events;
+    struct bt_hid_input_event event;
 };
 
 static void connected(bool success, void *user_data)
@@ -154,12 +157,29 @@ static void completed(enum bt_hogp_client_result result, void *user_data)
     log->result = result;
 }
 
+static void write_completed(enum bt_hogp_client_result result, void *user_data)
+{
+    struct test_log *log = user_data;
+
+    ++log->write_completed;
+    log->result = result;
+}
+
 static bool input_value(const struct bt_hid_value *value, void *user_data)
 {
     struct test_log *log = user_data;
 
     ++log->values;
     log->value = *value;
+    return true;
+}
+
+static bool input_event(const struct bt_hid_input_event *event, void *user_data)
+{
+    struct test_log *log = user_data;
+
+    ++log->events;
+    log->event = *event;
     return true;
 }
 
@@ -205,6 +225,7 @@ static void test_hogp_discovery_and_input_notification(void)
     BT_CHECK(log.connected == 1);
 
     bt_hogp_client_init(&hogp, &gatt);
+    bt_hogp_client_set_event_handler(&hogp, input_event, &log);
     BT_CHECK(bt_hogp_client_discover(&hogp, completed, input_value, &log, 2) == BT_OK);
     BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_READ_BY_GROUP_TYPE_REQUEST);
     bt_buf_writer_init(&w, response, sizeof(response));
@@ -229,6 +250,22 @@ static void test_hogp_discovery_and_input_notification(void)
     bt_buf_writer_write_u8(&w, 0x10);
     bt_buf_writer_write_le16(&w, 5);
     bt_buf_writer_write_le16(&w, BT_HOGP_UUID_REPORT);
+    bt_buf_writer_write_le16(&w, 8);
+    bt_buf_writer_write_u8(&w, 0x08);
+    bt_buf_writer_write_le16(&w, 9);
+    bt_buf_writer_write_le16(&w, BT_HOGP_UUID_REPORT);
+    bt_buf_writer_write_le16(&w, 11);
+    bt_buf_writer_write_u8(&w, 0x08);
+    bt_buf_writer_write_le16(&w, 12);
+    bt_buf_writer_write_le16(&w, BT_HOGP_UUID_PROTOCOL_MODE);
+    bt_buf_writer_write_le16(&w, 13);
+    bt_buf_writer_write_u8(&w, 0x10);
+    bt_buf_writer_write_le16(&w, 14);
+    bt_buf_writer_write_le16(&w, BT_HOGP_UUID_BOOT_KEYBOARD_INPUT);
+    bt_buf_writer_write_le16(&w, 16);
+    bt_buf_writer_write_u8(&w, 0x08);
+    bt_buf_writer_write_le16(&w, 17);
+    bt_buf_writer_write_le16(&w, BT_HOGP_UUID_BOOT_KEYBOARD_OUTPUT);
     feed_att(&manager, response, bt_buf_writer_len(&w), 5);
     BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_READ_BY_TYPE_REQUEST);
     send_error_not_found(&manager, BT_ATT_OPCODE_READ_BY_TYPE_REQUEST, 5, 6);
@@ -241,6 +278,10 @@ static void test_hogp_discovery_and_input_notification(void)
     bt_buf_writer_write_le16(&w, BT_HOGP_UUID_CCCD);
     bt_buf_writer_write_le16(&w, 7);
     bt_buf_writer_write_le16(&w, BT_HOGP_UUID_REPORT_REFERENCE);
+    bt_buf_writer_write_le16(&w, 10);
+    bt_buf_writer_write_le16(&w, BT_HOGP_UUID_REPORT_REFERENCE);
+    bt_buf_writer_write_le16(&w, 15);
+    bt_buf_writer_write_le16(&w, BT_HOGP_UUID_CCCD);
     feed_att(&manager, response, bt_buf_writer_len(&w), 7);
     BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_FIND_INFORMATION_REQUEST);
     send_error_not_found(&manager, BT_ATT_OPCODE_FIND_INFORMATION_REQUEST, 8, 8);
@@ -255,6 +296,13 @@ static void test_hogp_discovery_and_input_notification(void)
     {
         const uint8_t reference[] = {BT_ATT_OPCODE_READ_RESPONSE, 1,
                                      BT_HOGP_REPORT_TYPE_INPUT};
+
+        feed_att(&manager, reference, sizeof(reference), 10);
+    }
+    BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_READ_REQUEST);
+    {
+        const uint8_t reference[] = {BT_ATT_OPCODE_READ_RESPONSE, 2,
+                                     BT_HOGP_REPORT_TYPE_OUTPUT};
 
         feed_att(&manager, reference, sizeof(reference), 10);
     }
@@ -278,6 +326,61 @@ static void test_hogp_discovery_and_input_notification(void)
     BT_CHECK(log.value.report_id == 1);
     BT_CHECK(log.value.usage_page == 0x0C && log.value.usage == 0xE9);
     BT_CHECK(log.value.value == 1);
+    BT_CHECK(log.events == 1);
+    BT_CHECK(log.event.kind == BT_HID_INPUT_EVENT_CONSUMER);
+    BT_CHECK(log.event.usage == 0xE9 && log.event.value == 1);
+
+    {
+        const uint8_t leds = 0x03;
+
+        BT_CHECK(bt_hogp_client_write_report(
+                     &hogp, 2, BT_HOGP_REPORT_TYPE_OUTPUT, &leds, 1,
+                     write_completed, &log, 13) == BT_OK);
+    }
+    BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_WRITE_REQUEST);
+    {
+        const uint8_t written[] = {BT_ATT_OPCODE_WRITE_RESPONSE};
+
+        feed_att(&manager, written, sizeof(written), 14);
+    }
+    BT_CHECK(log.write_completed == 1 && log.result == BT_HOGP_CLIENT_OK);
+
+    BT_CHECK(bt_hogp_client_set_protocol_mode(
+                 &hogp, BT_HOGP_PROTOCOL_MODE_BOOT, write_completed, &log, 15) == BT_OK);
+    BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_WRITE_REQUEST);
+    {
+        const uint8_t written[] = {BT_ATT_OPCODE_WRITE_RESPONSE};
+
+        feed_att(&manager, written, sizeof(written), 16);
+    }
+    BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_WRITE_REQUEST);
+    {
+        const uint8_t written[] = {BT_ATT_OPCODE_WRITE_RESPONSE};
+
+        feed_att(&manager, written, sizeof(written), 17);
+    }
+    BT_CHECK(log.write_completed == 2 && log.result == BT_HOGP_CLIENT_OK);
+
+    {
+        const uint8_t notification[] = {
+            BT_ATT_OPCODE_HANDLE_VALUE_NOTIFICATION, 14, 0,
+            0x02, 0x00, 0x04, 0, 0, 0, 0, 0};
+
+        feed_att(&manager, notification, sizeof(notification), 18);
+    }
+    BT_CHECK(log.events == 3);
+    BT_CHECK(log.event.kind == BT_HID_INPUT_EVENT_KEY);
+    BT_CHECK(log.event.usage == 4 && log.event.value == 1);
+
+    BT_CHECK(bt_hogp_client_write_boot_keyboard_output(
+                 &hogp, 0x03, write_completed, &log, 19) == BT_OK);
+    BT_CHECK(take_opcode(&transport) == BT_ATT_OPCODE_WRITE_REQUEST);
+    {
+        const uint8_t written[] = {BT_ATT_OPCODE_WRITE_RESPONSE};
+
+        feed_att(&manager, written, sizeof(written), 20);
+    }
+    BT_CHECK(log.write_completed == 3 && log.result == BT_HOGP_CLIENT_OK);
 }
 
 void run_hogp_client_tests(void)

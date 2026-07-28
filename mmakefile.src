@@ -1,0 +1,57 @@
+# Native AROS MetaMake integration.
+#
+# Place this source tree at contrib/aros-bluzing in an AROS checkout.  The
+# normal "contrib" target then builds the stack as a link library and installs
+# the native smoke test in C:.
+
+include $(SRCDIR)/config/aros.cfg
+
+#MM- contrib : contrib-aros-bluzing
+#MM- contrib-aros-bluzing : linklibs-arosbluzing contrib-aros-bluzing-selftest
+#MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
+
+BLUZING_ROOT := $(SRCDIR)/$(CURDIR)
+
+BLUZING_FILES := \
+    core/buffer/endian \
+    core/buffer/buffer \
+    core/event/queue \
+    core/timer/timer \
+    core/controller/command_queue \
+    core/controller/controller \
+    core/addr/addr \
+    core/device/device_registry \
+    core/security/bond_store \
+    core/security/smp_crypto \
+    core/security/smp_pairing \
+    core/security/smp_manager \
+    core/hid/report_parser \
+    core/hid/input \
+    protocols/hci/hci \
+    protocols/l2cap/l2cap \
+    protocols/l2cap/signaling \
+    protocols/l2cap/channel_manager \
+    protocols/sdp/sdp \
+    protocols/sdp/sdp_client \
+    protocols/att/att \
+    protocols/gatt/gatt_client \
+    protocols/smp/smp \
+    profiles/hogp/hogp_client \
+    ports/aros/input/input_bridge \
+    ports/aros/input/input_device
+
+USER_INCLUDES := -I$(BLUZING_ROOT)/include \
+                 -I$(BLUZING_ROOT)/ports/aros/input
+USER_CFLAGS := -Wall -Wextra -Werror
+
+%build_linklib mmake=linklibs-arosbluzing \
+    libname=arosbluzing \
+    files="$(addprefix $(BLUZING_ROOT)/,$(BLUZING_FILES))"
+
+%build_prog mmake=contrib-aros-bluzing-selftest \
+    progname=aros-bluzing-selftest \
+    files="$(BLUZING_ROOT)/ports/aros/selftest/main" \
+    uselibs=arosbluzing \
+    targetdir=$(AROS_C)
+
+%common

@@ -1,0 +1,3 @@
+Echo "=== aros-bluzing selftest begin ===" >DEBUG:
+SYS:C/aros-bluzing-selftest >DEBUG:
+Echo "=== aros-bluzing selftest end ===" >DEBUG:
