@@ -10,6 +10,8 @@
 #include "addr/test_addr.h"
 #include "device/test_device_registry.h"
 #include "discovery/test_discovery.h"
+#include "l2cap/test_l2cap.h"
+#include "l2cap/test_signaling.h"
 
 #include <stdio.h>
 
@@ -26,6 +28,8 @@ int main(void)
     run_addr_tests();
     run_device_registry_tests();
     run_discovery_tests();
+    run_l2cap_tests();
+    run_l2cap_signaling_tests();
 
     printf("%d/%d checks passed\n", bt_test_count - bt_test_failures, bt_test_count);
 

@@ -4,7 +4,7 @@
 
 ## Objetivos atuais
 
-- **Fase 4 (discovery Classic e LE) está completa** no escopo portátil/testável em host: Inquiry, Inquiry Result/Complete, LE Set Scan Parameters/Enable, LE Advertising Report, banco unificado de dispositivos com dedup e detecção de dual-mode por endereço. Próximo passo natural: Fase 5 (L2CAP) ou finalmente montar a Bluetooth Manager Task/`bt_platform_ops` para começar a tocar AROS de verdade — a decidir.
+- **Fase 5 (L2CAP) em andamento**: codec de PDU (header+CID), fragmentação/remontagem sobre ACL, e codec de sinalização (Connection/Configuration/Disconnection Request-Response, Command Reject) estão prontos e testados. **Falta a máquina de estados do canal orientado a conexão** (lifecycle completo: IDLE→config bidirecional→OPEN→disconnect, com timeouts e tratamento de remoção durante negociação) — é a peça mais complexa restante da fase, ainda não iniciada.
 - Checkout de trabalho do AROS para este projeto: `/home/jaime/AROS-bluetooth`, branch `feature/bluetooth-stack` (checkout próprio, separado de outros checkouts/trabalhos do usuário) — ainda não usado para código, só para a investigação da Fase 0.
 
 ## Feito
@@ -43,8 +43,12 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
   - `bt_controller` estendido: `bt_controller_start_classic_inquiry`/`start_le_scan`, roteamento de Inquiry Result/LE Meta para o `device_registry`.
   - Transporte virtual estendido para simular um dispositivo Classic (via Command Status + Inquiry Result + Inquiry Complete) e um dispositivo LE (via Command Complete + LE Advertising Report).
   - **Bug real #3 (deadlock, achado antes mesmo do código de discovery)**: Command Status com sucesso estava deixando o slot da fila de comandos preso para sempre — exatamente o caso de Inquiry, que só responde via Command Status. Corrigido em commit separado antes de escrever qualquer código de discovery, evitando que o bug se manifestasse silenciosamente.
-- Testes: 575 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Fase 5 (L2CAP) — próximo passo possível, ainda não iniciado.
+- [x] **Fase 5 (L2CAP), parte 1**:
+  - `bluetooth/l2cap.h` + `protocols/l2cap/l2cap.c`: header L2CAP (Length+CID); reassembler de fragmentos ACL→PDU L2CAP (`bt_l2cap_reassembler`, tamanho fixo, detecta pacote truncado/comprimento inválido/início-durante-PDU-em-andamento); fragmentador PDU→ACL (`bt_l2cap_fragmenter`).
+  - `protocols/l2cap/signaling.c`: codec de sinalização — Connection Request/Response, Configuration Request/Response (só opção MTU, decisão de escopo documentada), Disconnection Request/Response, Command Reject. Parser de config ignora opções desconhecidas em vez de falhar.
+  - Testes: round-trip fragmentador↔remontador, PDU com header partido entre fragmentos, pacote truncado (nunca completa, nunca falha falsamente), comprimento inválido/excedente, início de novo PDU abandona o anterior em andamento.
+- Testes: 685 checks. `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Fase 5 (L2CAP), parte 2: máquina de estados do canal orientado a conexão (lifecycle, configuração bidirecional, timeouts, remoção durante negociação) e canais fixos LE (ATT/sinalização LE) — ainda não iniciados.
 - [ ] `bt_platform_ops` continua só declarada — ainda sem consumidor real (precisa de um event loop de verdade, AROS ou test-host).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).
