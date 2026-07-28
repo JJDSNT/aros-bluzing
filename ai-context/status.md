@@ -26,9 +26,11 @@ Já existe no AROS um `bluetooth.class` real (`rom/usb/classes/bluetooth/`, Chri
 - [x] Transporte virtual (`ports/test-host/virtual_transport/`) — controlador falso que responde a HCI Reset com Command Complete, síncrono, só para testes host.
 - [x] Encoder de HCI Command e parser de HCI Event/Command Complete (`include/bluetooth/hci.h`, `protocols/hci/hci.c`).
 - [x] **Sequência HCI Reset simulada** (`tests/virtual_transport/test_virtual_transport.c`): Reset Command → transporte virtual → Command Complete Event → controller state = initialized. Isso fecha a "Primeira entrega de código" de `project.md`.
-- Testes: 296 checks (endian, buffer, HCI encode/parse, transporte virtual), `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
-- [ ] Fase 1, parte 2: filas, eventos, timers abstratos (ainda não implementados — necessários para operação assíncrona real, não para a demo síncrona já feita).
-- [ ] Fase 2: HCI mínimo completo (command status, controle de créditos, fila de comandos, timeout, estado do controlador como módulo de verdade em `core/controller/`).
+- [x] Fila intrusiva SPSC (`bluetooth/queue.h`, `core/event/queue.c`) — sem alocação, nó embutido pelo chamador.
+- [x] Lista de timers ordenada por expiração (`bluetooth/timer.h`, `core/timer/timer.c`) — bookkeeping puro e testável com `now_us` explícito, sem depender de relógio real; add/cancel/pop_expired/next_expiry.
+- [x] Interface `bt_platform_ops` declarada (`bluetooth/platform.h`), exatamente como em `project.md`. **Sem implementação ainda** — decisão deliberada: não há consumidor real (a Bluetooth Manager Task não existe) até a Fase 2/porta AROS, então uma implementação de `ports/test-host/platform` ficaria especulativa. Implementar quando algo de fato chamar essa interface.
+- Testes: 337 checks (endian, buffer, HCI encode/parse, transporte virtual, fila, timers), `make test` limpo com `-Wall -Wextra -Werror` + ASan/UBSan. Cobertura LE/BE é estrutural (nenhum código depende de endianness do host — verificado por vetores de bytes fixos), não por build cross-compilado para BE real ainda.
+- [ ] Fase 2: HCI mínimo completo (command status, controle de créditos, fila de comandos usando `bt_queue`, timeout usando `bt_timer_list`, estado do controlador como módulo de verdade em `core/controller/`).
 - [ ] `ports/aros/library/` e `ports/aros/task/`: esqueletos de `bluetooth.library` e Bluetooth Manager Task.
 - [ ] `ports/aros/transport-usb/`: adapter sobre `usbbluetooth.device` (só depois de Fase 1/2 testadas).
 - [ ] Fase 4 em diante: seguir `project.md` sem mudança de plano.
