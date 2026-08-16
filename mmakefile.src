@@ -94,17 +94,32 @@ USER_CFLAGS := -Wall -Wextra -Werror -Wno-volatile-register-var
     src="$(BLUZING_ROOT)/ports/aros/package/Packages" \
     files="aros-bluzing" dst="$(AROS_ENVARC)/SYS/Packages"
 
+#
+# objdir per program, because both entry points are called main.c.
+#
+# %build_prog defaults objdir to $(GENDIR)/$(CURDIR), which is one directory for
+# this whole mmakefile, so two files with the same basename compile to the same
+# object -- and the second program links whichever main.o was written last. The
+# failure is not a missing file but an undefined symbol from the *other*
+# program: linking aros-bluzing-uart-selftest against selftest/main.o leaves
+# `U bt_virtual_transport_init`, which only the virtual transport defines.
+#
+# It stayed hidden while the two were built separately by hand, each overwriting
+# the other's object; it appears as soon as one run builds both.
+#
 %build_prog mmake=contrib-aros-bluzing-selftest \
     progname=aros-bluzing-selftest \
     files="$(BLUZING_ROOT)/ports/aros/selftest/main \
            $(BLUZING_ROOT)/ports/test-host/virtual_transport/virtual_transport" \
     uselibs=arosbluzing \
+    objdir=$(GENDIR)/$(CURDIR)/selftest \
     targetdir=$(BLUZING_PACKAGE)/C
 
 %build_prog mmake=contrib-aros-bluzing-uart-selftest \
     progname=aros-bluzing-uart-selftest \
     files="$(BLUZING_ROOT)/ports/aros/uart-selftest/main" \
     uselibs=arosbluzing \
+    objdir=$(GENDIR)/$(CURDIR)/uart-selftest \
     targetdir=$(BLUZING_PACKAGE)/C
 
 %common
