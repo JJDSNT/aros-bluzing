@@ -11,7 +11,8 @@ include $(SRCDIR)/config/aros.cfg
 #MM      linklibs-arosbluzing \
 #MM      contrib-aros-bluzing-library \
 #MM      contrib-aros-bluzing-package \
-#MM      contrib-aros-bluzing-selftest
+#MM      contrib-aros-bluzing-selftest \
+#MM      contrib-aros-bluzing-uart-selftest
 #MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
 #MM contrib-aros-bluzing-uart-selftest : linklibs-arosbluzing
 
