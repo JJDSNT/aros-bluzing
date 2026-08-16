@@ -1,6 +1,7 @@
 #include "../task/manager_task.h"
 #include "../transport-uart/uart_transport.h"
 
+#include <aros/debug.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
 
@@ -40,15 +41,23 @@ int main(void)
     enum bt_controller_state state = BT_CONTROLLER_STATE_UNINITIALIZED;
     bt_status_t status;
     unsigned int ticks;
-    BPTR output = Open(SELFTEST_CONSOLE, MODE_NEWFILE);
+    BPTR output;
+
+    bug("[aros-bluzing:selftest] entered, uart=%u manager=%u bytes\n",
+        (unsigned int)sizeof(*uart), (unsigned int)sizeof(*task));
+    output = Open(SELFTEST_CONSOLE, MODE_NEWFILE);
+    bug("[aros-bluzing:selftest] console=%p\n", (void *)output);
 
     if (output == BNULL)
         output = Output();
 
     uart = AllocVec(sizeof(*uart), MEMF_PUBLIC | MEMF_CLEAR);
+    bug("[aros-bluzing:selftest] uart allocation=%p\n", (void *)uart);
     task = AllocVec(sizeof(*task), MEMF_PUBLIC | MEMF_CLEAR);
+    bug("[aros-bluzing:selftest] manager allocation=%p\n", (void *)task);
     if (uart == NULL || task == NULL)
     {
+        bug("[aros-bluzing:selftest] allocation failed\n");
         FPrintf(output, (CONST_STRPTR)
                 "aros-bluzing-uart-selftest: allocation failed\n");
         FreeVec(task);
@@ -61,7 +70,9 @@ int main(void)
     bt_aros_uart_transport_init(uart);
     bt_aros_manager_task_init(task, &uart->transport, uart,
                               uart_signal_mask, uart_poll);
+    bug("[aros-bluzing:selftest] starting manager\n");
     status = bt_aros_manager_task_start(task);
+    bug("[aros-bluzing:selftest] manager start returned %d\n", (int)status);
     if (status != BT_OK)
     {
         FPrintf(output, (CONST_STRPTR)
