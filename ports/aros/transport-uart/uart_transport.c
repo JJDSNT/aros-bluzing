@@ -1,5 +1,6 @@
 #include "uart_transport.h"
 
+#include <aros/debug.h>
 #include <aros/libcall.h>
 #include <proto/exec.h>
 
@@ -52,25 +53,60 @@ static int uart_open(struct bt_hci_transport *transport)
     if (uart == NULL || uart->opened)
         return BT_ERR_INVALID_ARGUMENT;
     uart->resource = OpenResource((CONST_STRPTR)BTUART_RESOURCE_NAME);
-    if (uart->resource == NULL ||
-        btuart_get_version(uart->resource) != BTUART_API_VERSION)
+    if (uart->resource == NULL)
     {
+        bug("[aros-bluzing:uart] OpenResource(%s) failed\n",
+            BTUART_RESOURCE_NAME);
         uart->resource = NULL;
         return BT_ERR_IO;
     }
-    if (btuart_claim(uart->resource, uart) != BTUART_OK)
     {
-        uart->resource = NULL;
-        return BT_ERR_NO_RESOURCES;
+        unsigned int version = btuart_get_version(uart->resource);
+
+        if (version != BTUART_API_VERSION)
+        {
+            bug("[aros-bluzing:uart] ABI version %u, expected %u\n",
+                version, BTUART_API_VERSION);
+            uart->resource = NULL;
+            return BT_ERR_IO;
+        }
     }
-    if (btuart_configure(uart->resource, uart, 115200,
-                         BTUART_CONFIG_RTS_CTS) != BTUART_OK ||
-        btuart_set_power(uart->resource, uart, 1) != BTUART_OK)
     {
-        btuart_release(uart->resource, uart);
-        uart->resource = NULL;
-        return BT_ERR_IO;
+        LONG result = btuart_claim(uart->resource, uart);
+
+        if (result != BTUART_OK)
+        {
+            bug("[aros-bluzing:uart] BTUARTClaim failed: %d\n", (int)result);
+            uart->resource = NULL;
+            return BT_ERR_NO_RESOURCES;
+        }
     }
+    {
+        LONG result = btuart_configure(uart->resource, uart, 115200,
+                                       BTUART_CONFIG_RTS_CTS);
+
+        if (result != BTUART_OK)
+        {
+            bug("[aros-bluzing:uart] BTUARTConfigure failed: %d\n",
+                (int)result);
+            btuart_release(uart->resource, uart);
+            uart->resource = NULL;
+            return BT_ERR_IO;
+        }
+    }
+    {
+        LONG result = btuart_set_power(uart->resource, uart, 1);
+
+        if (result != BTUART_OK)
+        {
+            bug("[aros-bluzing:uart] BTUARTSetPower failed: %d\n",
+                (int)result);
+            btuart_release(uart->resource, uart);
+            uart->resource = NULL;
+            return BT_ERR_IO;
+        }
+    }
+    bug("[aros-bluzing:uart] H4 UART open at 115200 RTS/CTS\n");
     bt_h4_rx_init(&uart->h4_rx);
     uart->opened = true;
     return BT_OK;
