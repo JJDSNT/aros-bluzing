@@ -156,15 +156,24 @@ bt_status_t bt_aros_manager_task_start(struct bt_aros_manager_task *task)
         return BT_ERR_INVALID_ARGUMENT;
     task->creator = FindTask(NULL);
     SetSignal(0, SIGF_SINGLE);
-    Forbid();
+    /*
+     * NP_UserData rather than assigning pr_Task.tc_UserData afterwards.
+     *
+     * manager_process() reads tc_UserData as its first act and dereferences it
+     * immediately, so it must be set before the process can run. Assigning it
+     * after CreateNewProcTags() returns is a race that Forbid() does not close:
+     * CreateNewProc() allocates several times on the way (rom/dos/createnewproc.c
+     * :195-254, only one of them MEMF_NO_EXPUNGE) and an expunge inside AllocMem
+     * breaks the Forbid. Losing that race is silent -- the new process faults on
+     * a NULL task before reaching any Signal(), and the creator waits on
+     * SIGF_SINGLE forever.
+     */
     process = CreateNewProcTags(
         NP_Entry, (IPTR)manager_process,
         NP_Name, (IPTR)"Bluetooth Manager",
         NP_Priority, 1,
+        NP_UserData, (IPTR)task,
         TAG_DONE);
-    if (process != NULL)
-        process->pr_Task.tc_UserData = task;
-    Permit();
     if (process == NULL)
         return BT_ERR_NO_RESOURCES;
     Wait(SIGF_SINGLE);
