@@ -113,6 +113,9 @@ static void manager_process(void)
             if ((signals & timer_mask) != 0)
             {
                 WaitIO(&timer->tr_node);
+                if (transport_mask == 0 && task->poll != NULL &&
+                    task->poll(task->transport_context) != BT_OK)
+                    task->manager.state = BT_MANAGER_STATE_ERROR;
                 bt_manager_tick(&task->manager, timer_now_us(timer));
                 arm_tick(timer);
             }
@@ -175,4 +178,17 @@ void bt_aros_manager_task_stop(struct bt_aros_manager_task *task)
     SetSignal(0, SIGF_SINGLE);
     Signal(task->task, SIGBREAKF_CTRL_C);
     Wait(SIGF_SINGLE);
+}
+
+enum bt_controller_state bt_aros_manager_task_controller_state(
+    const struct bt_aros_manager_task *task)
+{
+    enum bt_controller_state state;
+
+    if (task == NULL)
+        return BT_CONTROLLER_STATE_ERROR;
+    Forbid();
+    state = task->manager.controller.state;
+    Permit();
+    return state;
 }

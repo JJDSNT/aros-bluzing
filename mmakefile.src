@@ -13,6 +13,7 @@ include $(SRCDIR)/config/aros.cfg
 #MM      contrib-aros-bluzing-package \
 #MM      contrib-aros-bluzing-selftest
 #MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
+#MM contrib-aros-bluzing-uart-selftest : linklibs-arosbluzing
 
 BLUZING_ROOT := $(SRCDIR)/$(CURDIR)
 BLUZING_PACKAGE := $(AROS_CONTRIB)/aros-bluzing
@@ -25,6 +26,7 @@ BLUZING_FILES := \
     core/timer/timer \
     core/controller/command_queue \
     core/controller/controller \
+    core/transport/h4 \
     core/manager/manager \
     core/addr/addr \
     core/device/device_registry \
@@ -49,11 +51,18 @@ BLUZING_FILES := \
     ports/aros/task/manager_task \
     ports/aros/transport-usb/usb_transport
 
+ifeq ($(AROS_TARGET_ARCH),emu68)
+ifeq ($(AROS_TARGET_CPU),m68k)
+BLUZING_FILES += ports/aros/transport-uart/uart_transport
+endif
+endif
+
 USER_INCLUDES := -I$(BLUZING_ROOT)/include \
                  -I$(BLUZING_ROOT)/ports/aros/input \
                  -I$(BLUZING_ROOT)/ports/aros/library \
                  -I$(BLUZING_ROOT)/ports/aros/task \
                  -I$(BLUZING_ROOT)/ports/aros/transport-usb \
+                 -I$(BLUZING_ROOT)/ports/aros/transport-uart \
                  -I$(BLUZING_ROOT)/ports/test-host
 USER_CFLAGS := -Wall -Wextra -Werror
 
@@ -86,6 +95,12 @@ USER_CFLAGS := -Wall -Wextra -Werror
     progname=aros-bluzing-selftest \
     files="$(BLUZING_ROOT)/ports/aros/selftest/main \
            $(BLUZING_ROOT)/ports/test-host/virtual_transport/virtual_transport" \
+    uselibs=arosbluzing \
+    targetdir=$(BLUZING_PACKAGE)/C
+
+%build_prog mmake=contrib-aros-bluzing-uart-selftest \
+    progname=aros-bluzing-uart-selftest \
+    files="$(BLUZING_ROOT)/ports/aros/uart-selftest/main" \
     uselibs=arosbluzing \
     targetdir=$(BLUZING_PACKAGE)/C
 

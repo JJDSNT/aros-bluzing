@@ -33,4 +33,8 @@ bt_status_t bt_aros_manager_task_start(struct bt_aros_manager_task *task);
 /* Signals the process to stop and waits until all I/O has been torn down. */
 void bt_aros_manager_task_stop(struct bt_aros_manager_task *task);
 
+/* Takes a scheduler-safe snapshot for diagnostics and hardware self-tests. */
+enum bt_controller_state bt_aros_manager_task_controller_state(
+    const struct bt_aros_manager_task *task);
+
 #endif /* AROS_BLUZING_MANAGER_TASK_H */

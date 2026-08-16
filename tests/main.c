@@ -2,6 +2,7 @@
 #include "endian/test_endian.h"
 #include "buffer/test_buffer.h"
 #include "hci/test_hci.h"
+#include "h4/test_h4.h"
 #include "virtual_transport/test_virtual_transport.h"
 #include "queue/test_queue.h"
 #include "timer/test_timer.h"
@@ -36,6 +37,7 @@ int main(void)
     run_endian_tests();
     run_buffer_tests();
     run_hci_tests();
+    run_h4_tests();
     run_virtual_transport_tests();
     run_queue_tests();
     run_timer_tests();
