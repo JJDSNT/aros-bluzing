@@ -6,7 +6,7 @@
 
 #define STARTUP_TICKS 500u
 #define SELFTEST_CONSOLE \
-    "CON:20/20/600/180/Bluetooth UART Self-Test/CLOSE/WAIT/AUTO"
+    ((CONST_STRPTR)"CON:20/20/600/180/Bluetooth UART Self-Test/CLOSE/WAIT/AUTO")
 
 static uint32_t uart_signal_mask(const void *context)
 {
@@ -49,7 +49,8 @@ int main(void)
     task = AllocVec(sizeof(*task), MEMF_PUBLIC | MEMF_CLEAR);
     if (uart == NULL || task == NULL)
     {
-        FPrintf(output, "aros-bluzing-uart-selftest: allocation failed\n");
+        FPrintf(output, (CONST_STRPTR)
+                "aros-bluzing-uart-selftest: allocation failed\n");
         FreeVec(task);
         FreeVec(uart);
         if (output != Output())
@@ -63,7 +64,8 @@ int main(void)
     status = bt_aros_manager_task_start(task);
     if (status != BT_OK)
     {
-        FPrintf(output, "aros-bluzing-uart-selftest: start failed (%d)\n",
+        FPrintf(output, (CONST_STRPTR)
+                "aros-bluzing-uart-selftest: start failed (%d)\n",
                 status);
         FreeVec(task);
         FreeVec(uart);
@@ -81,14 +83,14 @@ int main(void)
         Delay(1);
     }
 
-    FPrintf(output,
+    FPrintf(output, (CONST_STRPTR)
             "aros-bluzing-uart-selftest: controller %s after %u ticks\n",
             controller_state_name(state), ticks);
     if (state == BT_CONTROLLER_STATE_READY)
     {
         const struct bt_controller_info *info = &task->manager.controller.info;
 
-        FPrintf(output,
+        FPrintf(output, (CONST_STRPTR)
                 "  HCI %u.%u, manufacturer 0x%04x, ACL MTU %u, "
                 "ACL packets %u\n",
                 info->version.hci_version, info->version.hci_revision,
