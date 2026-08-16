@@ -52,7 +52,9 @@ static int uart_open(struct bt_hci_transport *transport)
 
     if (uart == NULL || uart->opened)
         return BT_ERR_INVALID_ARGUMENT;
+    bug("[aros-bluzing:uart] opening %s\n", BTUART_RESOURCE_NAME);
     uart->resource = OpenResource((CONST_STRPTR)BTUART_RESOURCE_NAME);
+    bug("[aros-bluzing:uart] OpenResource returned %p\n", uart->resource);
     if (uart->resource == NULL)
     {
         bug("[aros-bluzing:uart] OpenResource(%s) failed\n",
@@ -61,7 +63,11 @@ static int uart_open(struct bt_hci_transport *transport)
         return BT_ERR_IO;
     }
     {
-        unsigned int version = btuart_get_version(uart->resource);
+        unsigned int version;
+
+        bug("[aros-bluzing:uart] reading ABI version\n");
+        version = btuart_get_version(uart->resource);
+        bug("[aros-bluzing:uart] ABI version returned %u\n", version);
 
         if (version != BTUART_API_VERSION)
         {
@@ -72,7 +78,11 @@ static int uart_open(struct bt_hci_transport *transport)
         }
     }
     {
-        LONG result = btuart_claim(uart->resource, uart);
+        LONG result;
+
+        bug("[aros-bluzing:uart] claiming resource\n");
+        result = btuart_claim(uart->resource, uart);
+        bug("[aros-bluzing:uart] claim returned %d\n", (int)result);
 
         if (result != BTUART_OK)
         {
@@ -82,8 +92,12 @@ static int uart_open(struct bt_hci_transport *transport)
         }
     }
     {
-        LONG result = btuart_configure(uart->resource, uart, 115200,
-                                       BTUART_CONFIG_RTS_CTS);
+        LONG result;
+
+        bug("[aros-bluzing:uart] configuring 115200 RTS/CTS\n");
+        result = btuart_configure(uart->resource, uart, 115200,
+                                  BTUART_CONFIG_RTS_CTS);
+        bug("[aros-bluzing:uart] configure returned %d\n", (int)result);
 
         if (result != BTUART_OK)
         {
@@ -95,7 +109,11 @@ static int uart_open(struct bt_hci_transport *transport)
         }
     }
     {
-        LONG result = btuart_set_power(uart->resource, uart, 1);
+        LONG result;
+
+        bug("[aros-bluzing:uart] enabling controller power\n");
+        result = btuart_set_power(uart->resource, uart, 1);
+        bug("[aros-bluzing:uart] power returned %d\n", (int)result);
 
         if (result != BTUART_OK)
         {
