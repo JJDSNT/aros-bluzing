@@ -6,17 +6,38 @@
 #include <exec/ports.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
+#include <proto/timer.h>
 
 #include <string.h>
 
 #define BT_AROS_MANAGER_TICK_US 10000u
 
+/*
+ * The clock, read without an IORequest.
+ *
+ * This used to set TR_GETSYSTIME on the same timerequest the periodic tick is
+ * armed on and call DoIO(). An IORequest carries one request at a time, so
+ * whenever the loop woke on the transport signal -- with the TR_ADDREQUEST
+ * still in flight -- the DoIO overwrote its io_Command and tr_time and the
+ * tick was lost. The command queue then stopped being pumped, the HCI_Reset
+ * timed out, and the controller fell back to UNINITIALIZED even though the
+ * chip had answered. Intermittent by construction: whichever signal arrived
+ * first decided whether the request was clobbered.
+ *
+ * GetSysTime() is the same clock through timer.device's library vector, so it
+ * needs no request of its own and cannot collide with anything.
+ */
+/* Not static: proto/timer.h already declares it extern, and its inlines
+ * call through this exact name. */
+struct Device *TimerBase;
+
 static uint64_t timer_now_us(struct timerequest *request)
 {
-    request->tr_node.io_Command = TR_GETSYSTIME;
-    DoIO(&request->tr_node);
-    return (uint64_t)request->tr_time.tv_secs * 1000000ull +
-           request->tr_time.tv_micro;
+    struct timeval tv;
+
+    (void)request;
+    GetSysTime(&tv);
+    return (uint64_t)tv.tv_secs * 1000000ull + tv.tv_micro;
 }
 
 static void arm_tick(struct timerequest *request)
@@ -64,6 +85,7 @@ static struct timerequest *open_timer(void)
         DeleteMsgPort(port);
         return NULL;
     }
+    TimerBase = request->tr_node.io_Device;
     return request;
 }
 
