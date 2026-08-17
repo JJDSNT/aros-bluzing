@@ -82,6 +82,8 @@ bt_status_t bt_controller_start_classic_inquiry(struct bt_controller *ctrl, uint
 
 /* Uses reasonable default scan parameters (passive, 10ms interval/window,
  * public own address, no filter, duplicate filtering on). */
+bt_status_t bt_controller_stop_le_scan(struct bt_controller *ctrl, uint64_t now_us);
+
 bt_status_t bt_controller_start_le_scan(struct bt_controller *ctrl, uint64_t now_us);
 
 #endif /* BLUETOOTH_CONTROLLER_H */

@@ -12,6 +12,10 @@
  * passive LE scanning -- long enough for a phone or a watch nearby to
  * advertise several times, short enough not to hold up the boot. */
 #define SCAN_TICKS 600u
+/* Inquiry length in units of 1.28 s, and the wait that covers it with margin
+ * for the remote responses that trail the window. */
+#define INQUIRY_LENGTH 8u
+#define INQUIRY_TICKS  700u
 #define SELFTEST_CONSOLE \
     ((CONST_STRPTR)"CON:20/20/600/180/Bluetooth UART Self-Test/CLOSE/WAIT/AUTO")
 
@@ -208,11 +212,60 @@ int main(void)
                 Delay(1);
             }
         }
-        bug("[aros-bluzing:selftest] le scan saw %u device(s)\n",
-            (unsigned)seen);
-        FPrintf(output, (CONST_STRPTR)
-                "aros-bluzing-uart-selftest: LE scan saw %u device(s)\n",
-                (unsigned)seen);
+
+        /*
+         * Then Classic inquiry, because the two cannot run together and
+         * because LE alone cannot see what we are looking for. A keyboard or
+         * mouse that is already bonded does not advertise; it answers inquiry,
+         * and its class-of-device is what says it is a keyboard rather than a
+         * television.
+         */
+        bt_aros_manager_task_request_inquiry(task, INQUIRY_LENGTH);
+        Delay(2);
+        Forbid();
+        scan = task->inquiry_status;
+        Permit();
+        bug("[aros-bluzing:selftest] inquiry start = %d\n", (int)scan);
+        if (scan == BT_OK)
+        {
+            for (ticks = 0; ticks < INQUIRY_TICKS; ++ticks)
+                Delay(1);
+        }
+
+        {
+            size_t i, count, hid = 0;
+
+            Forbid();
+            count = bt_device_registry_count(&ctrl->devices);
+            Permit();
+            for (i = 0; i < count; i++)
+            {
+                const struct bt_discovered_device *d;
+
+                Forbid();
+                d = bt_device_registry_get(&ctrl->devices, i);
+                Permit();
+                if (d == NULL)
+                    continue;
+                if (d->flags & BT_DEVICE_FLAG_HID)
+                {
+                    hid++;
+                    bug("[aros-bluzing:selftest] HID %02x:%02x:%02x:%02x:%02x:%02x "
+                        "rssi %d cod 0x%06x appearance 0x%04x %s%s\n",
+                        d->addr.b[5], d->addr.b[4], d->addr.b[3],
+                        d->addr.b[2], d->addr.b[1], d->addr.b[0],
+                        (int)d->last_rssi, (unsigned)d->class_of_device,
+                        (unsigned)d->appearance,
+                        (d->flags & BT_DEVICE_FLAG_CLASSIC) ? "classic" : "",
+                        (d->flags & BT_DEVICE_FLAG_LE) ? " le" : "");
+                }
+            }
+            bug("[aros-bluzing:selftest] discovery: %u device(s), %u HID\n",
+                (unsigned)count, (unsigned)hid);
+            FPrintf(output, (CONST_STRPTR)
+                    "aros-bluzing-uart-selftest: %u device(s), %u HID\n",
+                    (unsigned)count, (unsigned)hid);
+        }
     }
 
     bt_aros_manager_task_stop(task);

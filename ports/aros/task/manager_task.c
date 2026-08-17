@@ -148,6 +148,17 @@ static void manager_process(void)
                 task->le_scan_status = bt_controller_start_le_scan(
                     &task->manager.controller, timer_now_us(timer));
             }
+            if (task->inquiry_requested)
+            {
+                struct bt_controller *ctrl = &task->manager.controller;
+                uint64_t now = timer_now_us(timer);
+
+                task->inquiry_requested = false;
+                /* Stop scanning first: one radio, so the two cannot overlap. */
+                bt_controller_stop_le_scan(ctrl, now);
+                task->inquiry_status = bt_controller_start_classic_inquiry(
+                    ctrl, task->inquiry_length, now);
+            }
             if ((signals & timer_mask) != 0)
             {
                 WaitIO(&timer->tr_node);
@@ -193,6 +204,19 @@ void bt_aros_manager_task_request_le_scan(struct bt_aros_manager_task *task)
     Forbid();
     task->le_scan_status = BT_OK;
     task->le_scan_requested = true;
+    Permit();
+    Signal(task->task, SIGBREAKF_CTRL_F);
+}
+
+void bt_aros_manager_task_request_inquiry(struct bt_aros_manager_task *task,
+                                          uint8_t length)
+{
+    if (task == NULL || task->task == NULL)
+        return;
+    Forbid();
+    task->inquiry_status = BT_OK;
+    task->inquiry_length = length;
+    task->inquiry_requested = true;
     Permit();
     Signal(task->task, SIGBREAKF_CTRL_F);
 }

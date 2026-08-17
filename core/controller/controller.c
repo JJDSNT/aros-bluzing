@@ -74,8 +74,23 @@ void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, siz
         if (bt_hci_le_adv_report_iter_init(&it, params, hdr.param_len) != BT_OK)
             return; /* not an advertising-report subevent; nothing to do here */
         while (bt_hci_le_adv_report_iter_next(&it, &report) == BT_OK)
-            bt_device_registry_note_le(&ctrl->devices, &report.address, report.address_type,
-                                        report.rssi);
+        {
+            struct bt_discovered_device *dev =
+                bt_device_registry_note_le(&ctrl->devices, &report.address,
+                                            report.address_type, report.rssi);
+            uint16_t appearance = 0;
+
+            /* The advertising payload was being parsed for nothing but its
+             * length. It is where an LE device says what it is: the HID-over-
+             * GATT UUID or an Appearance in the HID category. Without this a
+             * scan can only report addresses, and every advertiser in the room
+             * looks alike. */
+            if (dev != NULL &&
+                bt_le_adv_is_hid(report.data, report.data_len, &appearance))
+                dev->flags |= BT_DEVICE_FLAG_HID;
+            if (dev != NULL && appearance != 0)
+                dev->appearance = appearance;
+        }
     }
 }
 
@@ -151,6 +166,34 @@ bt_status_t bt_controller_start_le_scan(struct bt_controller *ctrl, uint64_t now
     bt_buf_writer_init(&w, params, sizeof(params));
     bt_buf_writer_write_u8(&w, 0x01); /* scan enable */
     bt_buf_writer_write_u8(&w, 0x01); /* filter duplicates */
+
+    st = bt_cmdq_submit(&ctrl->cmdq, BT_HCI_OPCODE_LE_SET_SCAN_ENABLE, params,
+                         (uint8_t)bt_buf_writer_len(&w), 0, ignore_completion, ctrl);
+    if (st != BT_OK)
+        return st;
+
+    bt_cmdq_pump(&ctrl->cmdq, now_us);
+    return BT_OK;
+}
+
+/*
+ * Stop scanning, which on this hardware is a precondition for inquiry rather
+ * than politeness: the CYW43438 shares one radio between BR/EDR and LE, so a
+ * discovery that wants both has to alternate. A Classic keyboard that is
+ * already bonded never advertises, and is only ever found by inquiry.
+ */
+bt_status_t bt_controller_stop_le_scan(struct bt_controller *ctrl, uint64_t now_us)
+{
+    uint8_t params[2];
+    struct bt_buf_writer w;
+    bt_status_t st;
+
+    if (ctrl->state != BT_CONTROLLER_STATE_READY)
+        return BT_ERR_INVALID_ARGUMENT;
+
+    bt_buf_writer_init(&w, params, sizeof(params));
+    bt_buf_writer_write_u8(&w, 0x00); /* scan disable */
+    bt_buf_writer_write_u8(&w, 0x00); /* filter duplicates: ignored when off */
 
     st = bt_cmdq_submit(&ctrl->cmdq, BT_HCI_OPCODE_LE_SET_SCAN_ENABLE, params,
                          (uint8_t)bt_buf_writer_len(&w), 0, ignore_completion, ctrl);
