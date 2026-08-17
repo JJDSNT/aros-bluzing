@@ -319,6 +319,18 @@ bt_status_t bt_aros_uart_transport_poll(struct bt_aros_uart_transport *uart)
             bt_h4_rx_feed(&uart->h4_rx, rx, (size_t)count,
                           deliver_packet, uart) != BT_OK)
             return BT_ERR_IO;
-    } while (count == (LONG)sizeof(rx));
+        /*
+         * Drain until the FIFO is empty, not until our buffer is full.
+         *
+         * The condition used to be `count == sizeof(rx)`, and rx is 256 bytes
+         * while the PL011 FIFO holds sixteen, so the loop always ran exactly
+         * once and left whatever arrived during the call sitting in hardware
+         * until the next tick. At 115200 baud a ten-millisecond tick is about
+         * 115 bytes against a sixteen-byte FIFO, so during an LE scan the
+         * overflow is not a risk but a certainty -- and a lost byte makes the
+         * H4 framer read payload as a packet type, which is where the
+         * impossible ACL packets in the log came from.
+         */
+    } while (count > 0);
     return BT_OK;
 }

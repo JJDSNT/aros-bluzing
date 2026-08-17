@@ -10,7 +10,17 @@
 
 #include <string.h>
 
-#define BT_AROS_MANAGER_TICK_US 10000u
+/*
+ * One millisecond, not ten.
+ *
+ * This is the only thing draining the UART: there is no receive interrupt yet
+ * (BTUART_CAP_RX_INTERRUPT is defined in the resource ABI and never set), so
+ * the tick period is the window in which the sixteen-byte PL011 FIFO has to
+ * survive. Ten milliseconds is 115 bytes at 115200 baud and loses data during
+ * any burst; one is eleven, which fits. The real fix is the interrupt, and
+ * this is what makes the scan usable until it exists.
+ */
+#define BT_AROS_MANAGER_TICK_US 1000u
 
 /*
  * The clock, read without an IORequest.
