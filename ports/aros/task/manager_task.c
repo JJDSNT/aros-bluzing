@@ -127,11 +127,17 @@ static void manager_process(void)
                     ? task->signal_mask(task->transport_context)
                     : 0;
             uint32_t signals =
-                Wait(SIGBREAKF_CTRL_C | timer_mask | transport_mask);
+                Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | timer_mask | transport_mask);
 
             if ((signals & transport_mask) != 0 && task->poll != NULL &&
                 task->poll(task->transport_context) != BT_OK)
                 task->manager.state = BT_MANAGER_STATE_ERROR;
+            if (task->le_scan_requested)
+            {
+                task->le_scan_requested = false;
+                task->le_scan_status = bt_controller_start_le_scan(
+                    &task->manager.controller, timer_now_us(timer));
+            }
             if ((signals & timer_mask) != 0)
             {
                 WaitIO(&timer->tr_node);
@@ -168,6 +174,17 @@ void bt_aros_manager_task_init(
     task->signal_mask = signal_mask;
     task->poll = poll;
     task->startup_status = BT_ERR_INVALID_ARGUMENT;
+}
+
+void bt_aros_manager_task_request_le_scan(struct bt_aros_manager_task *task)
+{
+    if (task == NULL || task->task == NULL)
+        return;
+    Forbid();
+    task->le_scan_status = BT_OK;
+    task->le_scan_requested = true;
+    Permit();
+    Signal(task->task, SIGBREAKF_CTRL_F);
 }
 
 bt_status_t bt_aros_manager_task_start(struct bt_aros_manager_task *task)

@@ -10,6 +10,12 @@
 #define BT_AROS_UART_TX_MAX (BT_H4_MAX_PACKET_SIZE + 1u)
 #define BT_AROS_UART_RX_CHUNK 256u
 
+/* How many inbound chunks to name on the debug console. Enough to carry the
+ * Command Complete for the two LE scan commands and their status bytes, which
+ * the core deliberately ignores, and the first advertising reports if any
+ * arrive. */
+#define BT_AROS_RX_TRACE_LIMIT 12u
+
 struct bt_aros_uart_transport
 {
     struct bt_hci_transport transport;
@@ -22,7 +28,7 @@ struct bt_aros_uart_transport
     size_t tx_offset;
     bool opened;
     bool receiving;
-    bool rx_seen;   /* first inbound byte announced, see uart_transport.c */
+    unsigned rx_traced; /* inbound chunks logged so far, see uart_transport.c */
 };
 
 void bt_aros_uart_transport_init(struct bt_aros_uart_transport *uart);

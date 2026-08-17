@@ -162,8 +162,22 @@ int main(void)
         size_t seen = 0;
         bt_status_t scan;
 
+        /*
+         * Ask the manager process to start it, rather than calling
+         * bt_controller_start_le_scan() from here.
+         *
+         * That function pumps the command queue with a timestamp, and the only
+         * correct clock is the one the manager process reads. Calling it here
+         * meant passing a timestamp this task does not have -- a zero -- which
+         * dated both queued commands to the epoch, so the next real tick timed
+         * them out before the controller could answer. The scan was cancelled
+         * a moment after being submitted, and the only visible symptom was a
+         * successful start followed by no advertising reports at all.
+         */
+        bt_aros_manager_task_request_le_scan(task);
+        Delay(2);
         Forbid();
-        scan = bt_controller_start_le_scan(ctrl, 0);
+        scan = task->le_scan_status;
         Permit();
         bug("[aros-bluzing:selftest] le scan start = %d\n", (int)scan);
 

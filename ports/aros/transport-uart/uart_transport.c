@@ -275,7 +275,7 @@ bt_status_t bt_aros_uart_transport_poll(struct bt_aros_uart_transport *uart)
         if (count < 0)
             return BT_ERR_IO;
         /*
-         * Announce the first bytes the controller ever sends.
+         * Announce the first few inbound chunks.
          *
          * Bring-up on a new board turns on one question -- did the chip answer
          * at all -- and without this the two failures look identical from the
@@ -284,14 +284,17 @@ bt_status_t bt_aros_uart_transport_poll(struct bt_aros_uart_transport *uart)
          * line, once, distinguishes them; after that the packet layer reports
          * for itself.
          */
-        if (count > 0 && !uart->rx_seen)
+        if (count > 0 && uart->rx_traced < BT_AROS_RX_TRACE_LIMIT)
         {
-            uart->rx_seen = true;
-            bug("[aros-bluzing:uart] first rx %ld bytes: %02x %02x %02x %02x\n",
+            uart->rx_traced++;
+            bug("[aros-bluzing:uart] rx %ld: %02x %02x %02x %02x %02x %02x %02x\n",
                 (long)count, rx[0],
                 count > 1 ? rx[1] : 0,
                 count > 2 ? rx[2] : 0,
-                count > 3 ? rx[3] : 0);
+                count > 3 ? rx[3] : 0,
+                count > 4 ? rx[4] : 0,
+                count > 5 ? rx[5] : 0,
+                count > 6 ? rx[6] : 0);
         }
         if (count > 0 &&
             bt_h4_rx_feed(&uart->h4_rx, rx, (size_t)count,

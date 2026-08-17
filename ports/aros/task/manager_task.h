@@ -3,6 +3,8 @@
 
 #include <bluetooth/manager.h>
 
+#include <stdbool.h>
+
 #include <exec/tasks.h>
 
 typedef uint32_t (*bt_aros_signal_mask_fn)(const void *context);
@@ -18,6 +20,8 @@ struct bt_aros_manager_task
     struct Task *task;
     struct Task *creator;
     bt_status_t startup_status;
+    volatile bool le_scan_requested; /* set by another task, cleared by ours */
+    bt_status_t le_scan_status;      /* result of the last requested scan */
 };
 
 void bt_aros_manager_task_init(
@@ -34,6 +38,15 @@ bt_status_t bt_aros_manager_task_start(struct bt_aros_manager_task *task);
 void bt_aros_manager_task_stop(struct bt_aros_manager_task *task);
 
 /* Takes a scheduler-safe snapshot for diagnostics and hardware self-tests. */
+/* Ask the manager process to start a passive LE scan on its next tick.
+ *
+ * The scan cannot be started from another task: bt_controller_start_le_scan()
+ * pumps the command queue with a timestamp, and the only correct clock is the
+ * one the manager process reads. A caller that passes its own -- or worse, a
+ * zero -- gives every queued command a deadline in the distant past, and the
+ * next real tick times them out before the controller has answered. */
+void bt_aros_manager_task_request_le_scan(struct bt_aros_manager_task *task);
+
 enum bt_controller_state bt_aros_manager_task_controller_state(
     const struct bt_aros_manager_task *task);
 
