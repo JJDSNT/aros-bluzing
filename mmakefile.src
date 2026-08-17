@@ -2,7 +2,8 @@
 #
 # Place this source tree at contrib/aros-bluzing in an AROS checkout.  The
 # normal "contrib" target then builds the stack as a link library and installs
-# the native smoke test in C:.
+# the package under Extras/aros-bluzing: the self-tests in its C: drawer, the
+# BTScan application in the drawer itself.
 
 include $(SRCDIR)/config/aros.cfg
 
@@ -126,22 +127,34 @@ USER_CFLAGS := -Wall -Wextra -Werror -Wno-volatile-register-var
 
 #MM- contrib-aros-bluzing-btscan : contrib-aros-bluzing-btscan-assets
 
+#
+# The package drawer itself, not its C: drawer.
+#
+# C: is the command path. Everything else this package puts there is a command
+# -- a self-test you run from a shell -- and Package-Startup exists to make
+# those reachable by name. BTScan is not one: it is a Workbench application
+# with an icon, and an icon in C: is an icon nobody can click.
+#
+# It belongs beside the drawer's other contents rather than in a system drawer,
+# so that removing Extras/aros-bluzing/ removes the whole package and leaves
+# nothing behind.
+#
 %build_prog mmake=contrib-aros-bluzing-btscan \
     progname=BTScan \
     files="$(BLUZING_ROOT)/ports/aros/btscan/main" \
     uselibs=arosbluzing \
     objdir=$(GENDIR)/$(CURDIR)/btscan \
-    targetdir=$(BLUZING_PACKAGE)/C
+    targetdir=$(BLUZING_PACKAGE)
 
 #
 # The banner and the icon land beside the executable so the program can name
 # them through PROGDIR:, which is the only path that stays right wherever the
-# package is installed. They are committed rather than generated here:
+# program is installed. They are committed rather than generated here:
 # producing them needs ImageMagick on the build host, and the build host is
 # not required to have it. images/make-assets.sh regenerates them.
 #
 %copy_files_q mmake=contrib-aros-bluzing-btscan-assets \
     src="$(BLUZING_ROOT)/ports/aros/btscan" \
-    files="BTScan-banner.png BTScan.info" dst="$(BLUZING_PACKAGE)/C"
+    files="BTScan-banner.png BTScan.info" dst="$(BLUZING_PACKAGE)"
 
 %common
