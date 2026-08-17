@@ -179,10 +179,20 @@ struct bt_hci_inquiry_result_entry
     uint16_t clock_offset;
 };
 
+/*
+ * The Inquiry Result event is column-major, not a sequence of records: after
+ * Num_Responses come all the BD_ADDRs, then all the Page_Scan_Repetition_Modes,
+ * then all the Reserved fields, then all the Classes of Device, then all the
+ * Clock_Offsets. With one response the two layouts coincide, which is why
+ * reading it as records looks correct until a second device answers -- and then
+ * every field after the first address comes from the wrong array.
+ */
 struct bt_hci_inquiry_result_iter
 {
-    struct bt_buf_reader r;
-    uint8_t remaining;
+    const uint8_t *base;   /* first BD_ADDR */
+    size_t available;      /* bytes from base to the end of the parameters */
+    uint8_t count;         /* Num_Responses */
+    uint8_t index;         /* next response to return */
 };
 
 /* event_params is an Inquiry Result event's parameters (after the 2-byte
