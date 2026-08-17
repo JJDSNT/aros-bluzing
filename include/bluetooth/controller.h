@@ -43,6 +43,10 @@ struct bt_controller_info
     struct bt_hci_buffer_size buffer_size;
 };
 
+/* Set by the port so core code can hand raw bytes out for inspection without
+ * owning a console. Null means no tracing, which is the default. */
+extern void (*bt_hci_raw_hook)(const char *what, const uint8_t *data, size_t length);
+
 struct bt_controller
 {
     struct bt_hci_transport *transport;
@@ -50,7 +54,8 @@ struct bt_controller
     struct bt_cmdq cmdq;
     enum bt_controller_state state;
     struct bt_controller_info info;
-    struct bt_device_registry devices; /* Fase 4: unified Classic/LE discovery results */
+    struct bt_device_registry devices;
+    unsigned inquiry_traced; /* Fase 4: unified Classic/LE discovery results */
 };
 
 void bt_controller_init(struct bt_controller *ctrl, struct bt_hci_transport *transport);

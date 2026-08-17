@@ -1,6 +1,7 @@
 #include "../task/manager_task.h"
 #include "../transport-uart/uart_transport.h"
 
+#include <bluetooth/controller.h>
 #include <bluetooth/device_registry.h>
 
 #include <aros/debug.h>
@@ -44,6 +45,26 @@ static const char *controller_state_name(enum bt_controller_state state)
     return "unknown";
 }
 
+/* Render whatever the core hands over. Sixteen bytes is enough to cover an
+ * inquiry result's fixed fields; the point is to see what arrived, not to log
+ * traffic. */
+static void selftest_raw(const char *what, const uint8_t *data, size_t length)
+{
+    size_t i;
+    char line[3 * 16 + 1];
+
+    for (i = 0; i < length && i < 16u; i++)
+    {
+        static const char hex[] = "0123456789abcdef";
+
+        line[i * 3u] = hex[(data[i] >> 4) & 0xf];
+        line[i * 3u + 1u] = hex[data[i] & 0xf];
+        line[i * 3u + 2u] = ' ';
+    }
+    line[i * 3u] = '\0';
+    bug("[aros-bluzing:selftest] %s len=%u: %s\n", what, (unsigned)length, line);
+}
+
 int main(void)
 {
     struct bt_aros_uart_transport *uart;
@@ -77,6 +98,7 @@ int main(void)
         return RETURN_FAIL;
     }
 
+    bt_hci_raw_hook = selftest_raw;
     bt_aros_uart_transport_init(uart);
     bt_aros_manager_task_init(task, &uart->transport, uart,
                               uart_signal_mask, uart_poll);

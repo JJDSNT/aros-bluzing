@@ -2,6 +2,11 @@
 
 #include <string.h>
 
+/* Set by the port; null means no tracing, which is the default. Bytes rather
+ * than a format string, because a freestanding core has no vprintf to forward
+ * varargs to and the port is the only side that can render anything. */
+void (*bt_hci_raw_hook)(const char *what, const uint8_t *data, size_t length);
+
 static void on_reset_complete(struct bt_cmdq_completion *completion, void *user_data);
 static void on_version_complete(struct bt_cmdq_completion *completion, void *user_data);
 static void on_features_complete(struct bt_cmdq_completion *completion, void *user_data);
@@ -60,6 +65,24 @@ void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, siz
     {
         struct bt_hci_inquiry_result_iter it;
         struct bt_hci_inquiry_result_entry entry;
+
+        /*
+         * The raw event, once.
+         *
+         * Two Classic entries have come back with addresses sharing a 12:34
+         * prefix across every run, while their classes of device were stable
+         * and sensible. Reading the parser twice has not explained that, and
+         * two attempts to fix it from the layout alone were wrong -- so print
+         * what actually arrived instead of proposing a third.
+         *
+         * Remove once the addresses are understood; this is a probe, not
+         * telemetry.
+         */
+        if (ctrl->inquiry_traced < 2u && bt_hci_raw_hook != NULL)
+        {
+            ctrl->inquiry_traced++;
+            bt_hci_raw_hook("inquiry", params, hdr.param_len);
+        }
 
         if (bt_hci_inquiry_result_iter_init(&it, params, hdr.param_len) != BT_OK)
             return;
