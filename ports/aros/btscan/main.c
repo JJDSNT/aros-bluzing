@@ -517,11 +517,18 @@ static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
             probe = Open(banner, MODE_OLDFILE);
         }
         /*
-         * The picture will not appear yet, and that is not this program's
-         * fault: NewDTObject returns NULL for every PNG on this port,
-         * including the distribution's own System/Images/Logos/AROS.logo.
-         * See ISSUE-0031. Naming the object anyway costs nothing, draws
-         * nothing, and starts working the day datatypes does.
+         * This drew nothing for a while: NewDTObject returned NULL for every
+         * PNG on the target, including the distribution's own AROS.logo, so
+         * the object was named in the hope that it would start working on its
+         * own. It did. The cause was never datatypes -- it was the FAT
+         * handler reading directory entries without byte-swapping, which made
+         * the Startup-Sequence's `AddDataTypes REFRESH QUIET` scan find
+         * nothing and say nothing about it.
+         *
+         * Kept as a comment rather than deleted because the failure mode is
+         * worth recognising again: a datatype that is simply not registered
+         * fails as NULL with IoErr() left at 0, which looks like a decoder
+         * problem and is not one.
          */
         if (probe != BNULL)
         {

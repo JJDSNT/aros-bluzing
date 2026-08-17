@@ -18,10 +18,13 @@ out="$here/../ports/aros/btscan"
 convert "$here/btscan-banner.png" -resize 288x192 -strip \
     -define png:compression-level=9 "$out/BTScan-banner.png"
 
-# The icon, in the classic Workbench format rather than as a PNG. icon.library
-# reads PNG icons through the png datatype, and picture datatypes are not
-# loading on the image we build (ISSUE-0031), so a PNG icon here is one nobody
-# can open. The classic format needs only icon.library.
-python3 "$here/mkicon.py" "$here/btscan-mascot-cutout.png" "$out/BTScan.info"
+# The icon. From the cutout master, because an icon sits on the Workbench
+# backdrop and an opaque square would read as a sticker; -trim first so the
+# character fills the 64x64 rather than the master's generous margin.
+convert "$here/btscan-mascot-cutout.png" -trim +repage -resize 64x64 \
+    -background none -gravity center -extent 64x64 -strip \
+    -define png:compression-level=9 "$here/.icon.tmp.png"
+python3 "$here/mkicon.py" "$here/.icon.tmp.png" "$out/BTScan.info"
+rm -f "$here/.icon.tmp.png"
 
 echo "assets written to $out"
