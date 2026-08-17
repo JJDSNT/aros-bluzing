@@ -85,15 +85,41 @@ int main(void)
         return RETURN_FAIL;
     }
 
-    for (ticks = 0; ticks < STARTUP_TICKS; ++ticks)
     {
-        state = bt_aros_manager_task_controller_state(task);
-        if (state == BT_CONTROLLER_STATE_READY ||
-            state == BT_CONTROLLER_STATE_ERROR)
-            break;
-        Delay(1);
+        /*
+         * Report every state change on the debug console as well as the
+         * summary below.
+         *
+         * The summary alone goes to SELFTEST_CONSOLE, a CON: window, so a
+         * headless serial run -- which is how this is actually exercised on a
+         * Pi -- saw the transport open and then nothing at all, and could not
+         * tell "reached READY" from "still resetting" from "the controller
+         * never answered". The bring-up sequence is RESET, read version, read
+         * features, read buffer size, so naming each transition also says
+         * which HCI command went unanswered.
+         */
+        enum bt_controller_state seen = BT_CONTROLLER_STATE_UNINITIALIZED;
+
+        bug("[aros-bluzing:selftest] controller %s\n",
+            controller_state_name(seen));
+        for (ticks = 0; ticks < STARTUP_TICKS; ++ticks)
+        {
+            state = bt_aros_manager_task_controller_state(task);
+            if (state != seen)
+            {
+                seen = state;
+                bug("[aros-bluzing:selftest] controller %s (tick %u)\n",
+                    controller_state_name(state), ticks);
+            }
+            if (state == BT_CONTROLLER_STATE_READY ||
+                state == BT_CONTROLLER_STATE_ERROR)
+                break;
+            Delay(1);
+        }
     }
 
+    bug("[aros-bluzing:selftest] controller %s after %u ticks\n",
+        controller_state_name(state), ticks);
     FPrintf(output, (CONST_STRPTR)
             "aros-bluzing-uart-selftest: controller %s after %u ticks\n",
             controller_state_name(state), ticks);
@@ -101,6 +127,12 @@ int main(void)
     {
         const struct bt_controller_info *info = &task->manager.controller.info;
 
+        bug("[aros-bluzing:selftest] HCI %u.%u mfr 0x%04x "
+            "ACL MTU %u packets %u\n",
+            info->version.hci_version, info->version.hci_revision,
+            info->version.manufacturer_name,
+            info->buffer_size.acl_data_packet_length,
+            info->buffer_size.total_num_acl_data_packets);
         FPrintf(output, (CONST_STRPTR)
                 "  HCI %u.%u, manufacturer 0x%04x, ACL MTU %u, "
                 "ACL packets %u\n",

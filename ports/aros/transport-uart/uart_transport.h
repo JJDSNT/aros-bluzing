@@ -22,6 +22,7 @@ struct bt_aros_uart_transport
     size_t tx_offset;
     bool opened;
     bool receiving;
+    bool rx_seen;   /* first inbound byte announced, see uart_transport.c */
 };
 
 void bt_aros_uart_transport_init(struct bt_aros_uart_transport *uart);
