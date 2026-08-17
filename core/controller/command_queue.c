@@ -109,6 +109,27 @@ void bt_cmdq_pump(struct bt_cmdq *q, uint64_t now_us)
     uint8_t wire[BT_HCI_COMMAND_HEADER_LEN + BT_HCI_MAX_PARAM_LEN];
     int rc;
 
+    /*
+     * Advance the queue's clock here too, not only in bt_cmdq_tick().
+     *
+     * last_tick_us is what a transport callback has to stamp an inbound event
+     * with, having no clock of its own -- see manager_receive(). It started at
+     * zero and was written only by the tick, so a reply that arrived before the
+     * first tick was dated to the epoch. Whatever the completion handler then
+     * submitted got a deadline five seconds after the epoch, and the first real
+     * tick -- a GetSysTime() value around 10^15 -- timed it out at once.
+     *
+     * The symptom was a controller that reset, received a correct Command
+     * Complete, and went back to UNINITIALIZED one tick later. Intermittent by
+     * construction: it depended on whether the controller answered before or
+     * after the first tick.
+     *
+     * Monotonic, so a caller that passes a stale or zero timestamp cannot drag
+     * the queue backwards.
+     */
+    if (now_us > q->last_tick_us)
+        q->last_tick_us = now_us;
+
     if (q->outstanding != NULL)
         return; /* one command in flight at a time */
     if (q->command_credits == 0)
@@ -215,7 +236,8 @@ void bt_cmdq_tick(struct bt_cmdq *q, uint64_t now_us)
 {
     struct bt_timer *t;
 
-    q->last_tick_us = now_us;
+    if (now_us > q->last_tick_us)
+        q->last_tick_us = now_us;
     while ((t = bt_timer_list_pop_expired(q->timers, now_us)) != NULL)
         t->callback(t, t->user_data);
 
