@@ -203,9 +203,10 @@ int main(void)
                     Permit();
                     if (d != NULL)
                         bug("[aros-bluzing:selftest] device "
-                            "%02x:%02x:%02x:%02x:%02x:%02x rssi %d flags 0x%x\n",
+                            "%02x:%02x:%02x:%02x:%02x:%02x %-24s rssi %d flags 0x%x\n",
                             d->addr.b[5], d->addr.b[4], d->addr.b[3],
                             d->addr.b[2], d->addr.b[1], d->addr.b[0],
+                            d->name_state ? d->name : "",
                             (int)d->last_rssi, d->flags);
                     seen++;
                 }
@@ -251,13 +252,14 @@ int main(void)
                 {
                     hid++;
                     bug("[aros-bluzing:selftest] HID %02x:%02x:%02x:%02x:%02x:%02x "
-                        "rssi %d cod 0x%06x appearance 0x%04x %s%s\n",
+                        "%-24s rssi %d cod 0x%06x %s%s%s\n",
                         d->addr.b[5], d->addr.b[4], d->addr.b[3],
                         d->addr.b[2], d->addr.b[1], d->addr.b[0],
+                        d->name_state ? d->name : "(no name)",
                         (int)d->last_rssi, (unsigned)d->class_of_device,
-                        (unsigned)d->appearance,
                         (d->flags & BT_DEVICE_FLAG_CLASSIC) ? "classic" : "",
-                        (d->flags & BT_DEVICE_FLAG_LE) ? " le" : "");
+                        (d->flags & BT_DEVICE_FLAG_LE) ? " le" : "",
+                        d->name_state == 1 ? " [label]" : "");
                 }
             }
             bug("[aros-bluzing:selftest] discovery: %u device(s), %u HID\n",

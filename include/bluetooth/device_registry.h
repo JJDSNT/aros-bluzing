@@ -27,6 +27,9 @@
  * Set from the Classic class-of-device or from LE advertising data; either
  * sighting is enough, and a dual-mode device usually says so on both. */
 #define BT_DEVICE_FLAG_HID (1u << 2)
+/* Long enough for the names devices actually advertise; the field is truncated
+ * rather than the entry rejected. */
+#define BT_DEVICE_NAME_LEN 25
 
 struct bt_discovered_device
 {
@@ -35,6 +38,20 @@ struct bt_discovered_device
     uint32_t class_of_device; /* meaningful iff BT_DEVICE_FLAG_CLASSIC is set */
     uint8_t le_address_type;  /* meaningful iff BT_DEVICE_FLAG_LE is set */
     uint16_t appearance;      /* LE appearance, 0 when not advertised */
+    /*
+     * A name, and how much it is worth.
+     *
+     * 0 nothing, 1 a label this code synthesized from appearance or class of
+     * device, 2 a name the device gave. The state exists so a real name is
+     * never overwritten by a label, and so a caller can tell "<mouse>" from a
+     * device that calls itself that.
+     *
+     * A remote-name-request would be the third source and is deliberately not
+     * here: the legacy port planned that phase, removed it after it did not
+     * work, and shipped with exactly this ladder instead.
+     */
+    char name[BT_DEVICE_NAME_LEN];
+    uint8_t name_state;
     int8_t last_rssi;
     uint32_t sightings;
 };
@@ -42,6 +59,7 @@ struct bt_discovered_device
 #ifndef BT_DEVICE_REGISTRY_MAX
 #define BT_DEVICE_REGISTRY_MAX 32
 #endif
+
 
 struct bt_device_registry
 {
@@ -73,7 +91,29 @@ bool bt_cod_is_hid(uint32_t class_of_device);
  * UUID 0x1812 in either the complete or the incomplete 16-bit UUID list, or an
  * Appearance whose category is 15 (HID). Writes the appearance out when it is
  * present, so a caller can keep it whether or not it decided HID. */
+/* What an advertising payload says about a device. Every field is optional;
+ * `name` points into `data` and is not NUL-terminated. */
+struct bt_le_adv_info
+{
+    bool hid;
+    uint16_t appearance;
+    const uint8_t *name;
+    size_t name_len;
+    bool name_complete;   /* EIR 0x09 rather than the shortened 0x08 */
+};
+
+void bt_le_adv_parse(const uint8_t *data, size_t length, struct bt_le_adv_info *out);
+
 bool bt_le_adv_is_hid(const uint8_t *data, size_t length, uint16_t *appearance_out);
+
+/* Record a name the device gave (state 2) or a label we made up (state 1). A
+ * label never replaces a real name. */
+void bt_device_set_name(struct bt_discovered_device *dev, const char *name,
+                        size_t length, uint8_t state);
+
+/* "<keyboard>", "<mouse>", "<HID device>" ... or NULL when nothing is known. */
+const char *bt_label_from_appearance(uint16_t appearance);
+const char *bt_label_from_cod(uint32_t class_of_device);
 
 struct bt_discovered_device *bt_device_registry_note_le(struct bt_device_registry *reg,
                                                           const struct bt_addr *addr,

@@ -68,6 +68,12 @@ struct bt_discovered_device *bt_device_registry_note_classic(struct bt_device_re
     dev->flags |= BT_DEVICE_FLAG_CLASSIC;
     if (bt_cod_is_hid(class_of_device))
         dev->flags |= BT_DEVICE_FLAG_HID;
+    {
+        const char *label = bt_label_from_cod(class_of_device);
+
+        if (label != NULL)
+            bt_device_set_name(dev, label, BT_DEVICE_NAME_LEN, 1);
+    }
     dev->class_of_device = class_of_device;
     dev->sightings++;
     return dev;
@@ -101,15 +107,19 @@ bool bt_cod_is_hid(uint32_t class_of_device)
  * 16-bit value whose top ten bits are a category, and category 15 is HID --
  * which covers keyboard (0x03C1) and mouse (0x03C2) without enumerating them.
  */
-bool bt_le_adv_is_hid(const uint8_t *data, size_t length, uint16_t *appearance_out)
+void bt_le_adv_parse(const uint8_t *data, size_t length, struct bt_le_adv_info *out)
 {
     size_t i = 0;
-    bool hid = false;
 
-    if (appearance_out != NULL)
-        *appearance_out = 0;
+    if (out == NULL)
+        return;
+    out->hid = false;
+    out->appearance = 0;
+    out->name = NULL;
+    out->name_len = 0;
+    out->name_complete = false;
     if (data == NULL)
-        return false;
+        return;
 
     while (i < length)
     {
@@ -119,14 +129,17 @@ bool bt_le_adv_is_hid(const uint8_t *data, size_t length, uint16_t *appearance_o
         size_t payload_len;
 
         if (field_len == 0)
-            break;
+            break;                  /* end of list; the rest is padding */
         if (i + 1u + field_len > length)
-            break;              /* truncated field; take what was valid */
+            break;                  /* truncated field: keep what was valid */
         type = data[i + 1u];
         payload = &data[i + 2u];
         payload_len = field_len - 1u;
 
-        if ((type == 0x02u || type == 0x03u) && payload_len >= 2u)
+        switch (type)
+        {
+        case 0x02u:                 /* incomplete list of 16-bit service UUIDs */
+        case 0x03u:                 /* complete list */
         {
             size_t u;
 
@@ -135,23 +148,111 @@ bool bt_le_adv_is_hid(const uint8_t *data, size_t length, uint16_t *appearance_o
                 const uint16_t uuid =
                     (uint16_t)payload[u] | ((uint16_t)payload[u + 1u] << 8);
 
-                if (uuid == 0x1812u)
-                    hid = true;
+                if (uuid == 0x1812u)    /* HID over GATT */
+                    out->hid = true;
             }
+            break;
         }
-        else if (type == 0x19u && payload_len >= 2u)
-        {
-            const uint16_t appearance =
-                (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
-
-            if (appearance_out != NULL)
-                *appearance_out = appearance;
-            if ((appearance >> 6) == 15u)
-                hid = true;
+        case 0x08u:                 /* shortened local name */
+        case 0x09u:                 /* complete local name */
+            /*
+             * Prefer the complete name, but take the shortened one when that is
+             * all there is -- many devices advertise only 0x08 because the
+             * payload is 31 bytes and a full name does not fit beside the
+             * service UUIDs.
+             */
+            if (out->name == NULL || (type == 0x09u && !out->name_complete))
+            {
+                out->name = payload;
+                out->name_len = payload_len;
+                out->name_complete = (type == 0x09u);
+            }
+            break;
+        case 0x19u:                 /* appearance */
+            if (payload_len >= 2u)
+            {
+                out->appearance =
+                    (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
+                if ((out->appearance >> 6) == 15u)  /* category 15: HID */
+                    out->hid = true;
+            }
+            break;
+        default:
+            break;
         }
         i += 1u + field_len;
     }
-    return hid;
+}
+
+bool bt_le_adv_is_hid(const uint8_t *data, size_t length, uint16_t *appearance_out)
+{
+    struct bt_le_adv_info info;
+
+    bt_le_adv_parse(data, length, &info);
+    if (appearance_out != NULL)
+        *appearance_out = info.appearance;
+    return info.hid;
+}
+
+/*
+ * Names are stored printable and trimmed.
+ *
+ * Advertising and EIR names are NUL-padded to the field width, so stopping at
+ * the first NUL is what keeps the padding from being rendered; anything outside
+ * printable ASCII becomes '?' rather than being dropped, so a mojibake name
+ * still has the right shape and length.
+ */
+void bt_device_set_name(struct bt_discovered_device *dev, const char *name,
+                        size_t length, uint8_t state)
+{
+    size_t i;
+
+    if (dev == NULL || name == NULL || state == 0)
+        return;
+    if (state <= dev->name_state)
+        return;                 /* never downgrade a real name to a label */
+
+    for (i = 0; i < length && i + 1u < BT_DEVICE_NAME_LEN && name[i] != '\0'; i++)
+    {
+        const char c = name[i];
+
+        dev->name[i] = (c >= 0x20 && c <= 0x7e) ? c : '?';
+    }
+    while (i > 0 && dev->name[i - 1u] == ' ')
+        i--;
+    dev->name[i] = '\0';
+    dev->name_state = state;
+}
+
+const char *bt_label_from_appearance(uint16_t appearance)
+{
+    switch (appearance)
+    {
+    case 961: return "<keyboard>";
+    case 962: return "<mouse>";
+    case 963: return "<joystick>";
+    case 964: return "<gamepad>";
+    default:  return (appearance >> 6) == 15u ? "<HID device>" : NULL;
+    }
+}
+
+const char *bt_label_from_cod(uint32_t class_of_device)
+{
+    if (((class_of_device >> 8) & 0x1fu) != 0x05u)   /* major: peripheral */
+        return NULL;
+    switch ((class_of_device >> 2) & 0x0fu)          /* minor: pointing/gaming */
+    {
+    case 1: return "<joystick>";
+    case 2: return "<gamepad>";
+    default: break;
+    }
+    switch ((class_of_device >> 6) & 0x03u)          /* minor: keyboard/pointing */
+    {
+    case 1: return "<keyboard>";
+    case 2: return "<mouse>";
+    case 3: return "<keyboard+mouse>";
+    default: return "<HID device>";
+    }
 }
 
 struct bt_discovered_device *bt_device_registry_note_le(struct bt_device_registry *reg,

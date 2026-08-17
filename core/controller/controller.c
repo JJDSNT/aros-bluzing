@@ -78,18 +78,25 @@ void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, siz
             struct bt_discovered_device *dev =
                 bt_device_registry_note_le(&ctrl->devices, &report.address,
                                             report.address_type, report.rssi);
-            uint16_t appearance = 0;
+            struct bt_le_adv_info info;
 
-            /* The advertising payload was being parsed for nothing but its
-             * length. It is where an LE device says what it is: the HID-over-
-             * GATT UUID or an Appearance in the HID category. Without this a
-             * scan can only report addresses, and every advertiser in the room
-             * looks alike. */
-            if (dev != NULL &&
-                bt_le_adv_is_hid(report.data, report.data_len, &appearance))
-                dev->flags |= BT_DEVICE_FLAG_HID;
-            if (dev != NULL && appearance != 0)
-                dev->appearance = appearance;
+            bt_le_adv_parse(report.data, report.data_len, &info);
+            if (dev != NULL)
+            {
+                if (info.hid)
+                    dev->flags |= BT_DEVICE_FLAG_HID;
+                if (info.appearance != 0)
+                {
+                    dev->appearance = info.appearance;
+                    bt_device_set_name(dev,
+                                       bt_label_from_appearance(info.appearance),
+                                       BT_DEVICE_NAME_LEN, 1);
+                }
+                if (info.name != NULL)
+                    bt_device_set_name(dev, (const char *)info.name,
+                                       info.name_len, 2);
+            }
+
         }
     }
 }
