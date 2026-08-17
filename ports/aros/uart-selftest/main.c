@@ -1,11 +1,17 @@
 #include "../task/manager_task.h"
 #include "../transport-uart/uart_transport.h"
 
+#include <bluetooth/device_registry.h>
+
 #include <aros/debug.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
 
 #define STARTUP_TICKS 500u
+/* Ticks are Delay() units, 1/50 s, so this is roughly twelve seconds of
+ * passive LE scanning -- long enough for a phone or a watch nearby to
+ * advertise several times, short enough not to hold up the boot. */
+#define SCAN_TICKS 600u
 #define SELFTEST_CONSOLE \
     ((CONST_STRPTR)"CON:20/20/600/180/Bluetooth UART Self-Test/CLOSE/WAIT/AUTO")
 
@@ -141,6 +147,60 @@ int main(void)
                 info->buffer_size.acl_data_packet_length,
                 info->buffer_size.total_num_acl_data_packets);
     }
+    /*
+     * Having a controller is not the same as having Bluetooth. Scan, so the
+     * self-test answers the question that matters -- does this stack see the
+     * world -- rather than only reporting that the chip identified itself.
+     *
+     * Passive LE scan: no transmission, so nothing here depends on the
+     * controller having been given a public address or a firmware patch, and
+     * the result is checkable by walking into the room with a phone.
+     */
+    if (state == BT_CONTROLLER_STATE_READY)
+    {
+        struct bt_controller *ctrl = &task->manager.controller;
+        size_t seen = 0;
+        bt_status_t scan;
+
+        Forbid();
+        scan = bt_controller_start_le_scan(ctrl, 0);
+        Permit();
+        bug("[aros-bluzing:selftest] le scan start = %d\n", (int)scan);
+
+        if (scan == BT_OK)
+        {
+            for (ticks = 0; ticks < SCAN_TICKS; ++ticks)
+            {
+                size_t now;
+
+                Forbid();
+                now = bt_device_registry_count(&ctrl->devices);
+                Permit();
+                while (seen < now)
+                {
+                    const struct bt_discovered_device *d;
+
+                    Forbid();
+                    d = bt_device_registry_get(&ctrl->devices, seen);
+                    Permit();
+                    if (d != NULL)
+                        bug("[aros-bluzing:selftest] device "
+                            "%02x:%02x:%02x:%02x:%02x:%02x rssi %d flags 0x%x\n",
+                            d->addr.b[5], d->addr.b[4], d->addr.b[3],
+                            d->addr.b[2], d->addr.b[1], d->addr.b[0],
+                            (int)d->last_rssi, d->flags);
+                    seen++;
+                }
+                Delay(1);
+            }
+        }
+        bug("[aros-bluzing:selftest] le scan saw %u device(s)\n",
+            (unsigned)seen);
+        FPrintf(output, (CONST_STRPTR)
+                "aros-bluzing-uart-selftest: LE scan saw %u device(s)\n",
+                (unsigned)seen);
+    }
+
     bt_aros_manager_task_stop(task);
     FreeVec(task);
     FreeVec(uart);
