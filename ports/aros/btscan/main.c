@@ -46,7 +46,23 @@ struct Library *IconBase;
  * device appearing feels immediate, slow enough to be free. */
 #define BTSCAN_REFRESH_US 500000u
 
+/*
+ * Two names for one file, because PROGDIR: is not always set.
+ *
+ * PROGDIR: is the right answer and the only one that survives the package
+ * being installed somewhere else, and Workbench -- which is how this program
+ * is meant to be started -- sets it. A shell does not always: AROS gives a new
+ * process a duplicate of *its parent's* home directory (rom/dos/createnewproc.c
+ * :353) rather than the directory the program was loaded from, so a copy
+ * launched with `Run` inherits the shell's PROGDIR: and never finds anything
+ * beside itself.
+ *
+ * The fallback is the package's own drawer, which is not an arbitrary guess:
+ * it is where the package installs and what it registers itself as.
+ */
 #define BTSCAN_BANNER ((CONST_STRPTR) "PROGDIR:BTScan-banner.png")
+#define BTSCAN_BANNER_ALT \
+    ((CONST_STRPTR) "SYS:Extras/aros-bluzing/BTScan-banner.png")
 #define BTSCAN_ICON ((CONST_STRPTR) "PROGDIR:BTScan")
 
 enum
@@ -77,6 +93,9 @@ struct btscan
     Object *window;
     Object *list;
     Object *status;
+    Object *banner;
+    Object *scan;
+    Object *inquiry;
     Object *connect;
     Object *disconnect;
 
@@ -270,17 +289,21 @@ static void refresh_status(struct btscan *bs)
     }
 
     snprintf(text, sizeof(text),
-             MUIX_C "Controller %s" MUIX_N "  -  %u device%s, %u input device%s",
+             MUIX_C "%s  -  %u device%s, %u input",
              state_name(state),
              (unsigned)bt_device_registry_count(reg),
              bt_device_registry_count(reg) == 1 ? "" : "s",
-             (unsigned)hid, hid == 1 ? "" : "s");
+             (unsigned)hid);
     set(bs->status, MUIA_Text_Contents, (IPTR)text);
 }
 
 static void refresh(struct btscan *bs)
 {
-    ULONG digest = registry_digest(registry(bs));
+    ULONG digest;
+
+    if (!bs->manager_running)
+        return;
+    digest = registry_digest(registry(bs));
 
     if (digest != bs->digest)
     {
@@ -401,9 +424,6 @@ static Object *build_menu(void)
 
 static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
 {
-    Object *scan;
-    Object *inquiry;
-
     display_hook.h_Entry = (HOOKFUNC)HookEntry;
     display_hook.h_SubEntry = (HOOKFUNC)display_func;
     destruct_hook.h_Entry = (HOOKFUNC)HookEntry;
@@ -434,9 +454,8 @@ static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
                  * have to repeat it in a label. */
                 Child, (IPTR)HGroup,
                     MUIA_Group_Spacing, 8,
-                    Child, (IPTR)DtpicObject,
-                        MUIA_Dtpic_Name, (IPTR)BTSCAN_BANNER,
-                        End,
+                    Child, (IPTR)(bs->banner = DtpicObject,
+                        End),
                     Child, (IPTR)VGroup,
                         Child, (IPTR)HVSpace,
                         Child, (IPTR)TextObject,
@@ -445,9 +464,9 @@ static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
                             End,
                         Child, (IPTR)TextObject,
                             MUIA_Text_Contents, (IPTR)
-                                "Scan finds devices that advertise; inquiry\n"
-                                "finds devices that answer a page. The radio\n"
-                                "does one at a time.",
+                                "Scan hears devices that advertise.\n"
+                                "Inquiry pages devices that do not.\n"
+                                "One radio: they take turns.",
                             End,
                         Child, (IPTR)HVSpace,
                         End,
@@ -460,21 +479,24 @@ static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
                         MUIA_List_DisplayHook, (IPTR)&display_hook,
                         MUIA_List_DestructHook, (IPTR)&destruct_hook,
                         MUIA_List_Format, (IPTR)
-                            "BAR,BAR,BAR,P=\33c BAR,P=\33r",
+                            "WEIGHT=300 BAR,WEIGHT=200 BAR,"
+                            "WEIGHT=80 BAR,WEIGHT=50 P=\33c BAR,"
+                            "WEIGHT=100 P=\33r",
                         MUIA_List_Title, TRUE,
                         End),
                     End,
 
                 Child, (IPTR)(bs->status = TextObject,
                     TextFrame,
+                    MUIA_Text_SetMin, TRUE,
                     MUIA_Background, MUII_TextBack,
                     MUIA_Text_Contents, (IPTR)(MUIX_C "Starting..."),
                     End),
 
                 Child, (IPTR)HGroup,
                     Child, (IPTR)HVSpace,
-                    Child, (IPTR)(scan = SimpleButton("_Scan")),
-                    Child, (IPTR)(inquiry = SimpleButton("_Inquiry")),
+                    Child, (IPTR)(bs->scan = SimpleButton("_Scan")),
+                    Child, (IPTR)(bs->inquiry = SimpleButton("_Inquiry")),
                     Child, (IPTR)(bs->connect = SimpleButton("_Connect")),
                     Child, (IPTR)(bs->disconnect = SimpleButton("_Disconnect")),
                     End,
@@ -485,9 +507,33 @@ static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
     if (bs->app == NULL)
         return FALSE;
 
-    set(scan, MUIA_ShortHelp, (IPTR)
+    {
+        CONST_STRPTR banner = BTSCAN_BANNER;
+        BPTR probe = Open(banner, MODE_OLDFILE);
+
+        if (probe == BNULL)
+        {
+            banner = BTSCAN_BANNER_ALT;
+            probe = Open(banner, MODE_OLDFILE);
+        }
+        /*
+         * The picture will not appear yet, and that is not this program's
+         * fault: NewDTObject returns NULL for every PNG on this port,
+         * including the distribution's own System/Images/Logos/AROS.logo.
+         * See ISSUE-0031. Naming the object anyway costs nothing, draws
+         * nothing, and starts working the day datatypes does.
+         */
+        if (probe != BNULL)
+        {
+            Close(probe);
+            set(bs->banner, MUIA_Dtpic_Name, (IPTR)banner);
+        }
+
+    }
+
+    set(bs->scan, MUIA_ShortHelp, (IPTR)
         "Listen for LE advertisements. Stops any inquiry in progress.");
-    set(inquiry, MUIA_ShortHelp, (IPTR)
+    set(bs->inquiry, MUIA_ShortHelp, (IPTR)
         "Page for classic devices. Stops LE scanning: one radio, one mode.");
 
     /* Connection is not in the stack yet. A live button that silently does
@@ -502,9 +548,9 @@ static BOOL build_ui(struct btscan *bs, struct DiskObject *icon)
     DoMethod(bs->window, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
              (IPTR)bs->app, 2, MUIM_Application_ReturnID,
              MUIV_Application_ReturnID_Quit);
-    DoMethod(scan, MUIM_Notify, MUIA_Pressed, FALSE,
+    DoMethod(bs->scan, MUIM_Notify, MUIA_Pressed, FALSE,
              (IPTR)bs->app, 3, MUIM_CallHook, (IPTR)&scan_hook, NULL);
-    DoMethod(inquiry, MUIM_Notify, MUIA_Pressed, FALSE,
+    DoMethod(bs->inquiry, MUIM_Notify, MUIA_Pressed, FALSE,
              (IPTR)bs->app, 3, MUIM_CallHook, (IPTR)&inquiry_hook, NULL);
 
     return TRUE;
@@ -596,11 +642,18 @@ static void teardown(struct btscan *bs, struct DiskObject *icon)
 
 static void fail(struct btscan *bs, struct DiskObject *icon, const char *why)
 {
-    /* Before the UI exists there is nowhere on screen to say this, so it goes
-     * where a Workbench-launched program's complaints can still be read. */
-    PutStr((CONST_STRPTR)"BTScan: ");
-    PutStr((CONST_STRPTR)why);
-    PutStr((CONST_STRPTR)"\n");
+    /*
+     * A requester, not PutStr.
+     *
+     * This program is normally launched from Workbench, where there is no
+     * Output() to write to -- a complaint printed there is a complaint nobody
+     * receives, which is indistinguishable from the program doing nothing at
+     * all. MUI_RequestA takes NULL for both the application and the window, so
+     * it works before the UI exists, which is exactly when these failures
+     * happen.
+     */
+    MUI_RequestA(NULL, NULL, 0, (CONST_STRPTR)"BTScan", (CONST_STRPTR)"*_Ok",
+                 (CONST_STRPTR)why, NULL);
     teardown(bs, icon);
 }
 
@@ -629,17 +682,6 @@ int main(void)
         goto done;
     }
 
-    bt_aros_uart_transport_init(bs->uart);
-    bt_aros_manager_task_init(bs->task, &bs->uart->transport, bs->uart,
-                              uart_signal_mask, uart_poll);
-    status = bt_aros_manager_task_start(bs->task);
-    if (status != BT_OK)
-    {
-        fail(bs, icon, "the Bluetooth manager would not start");
-        goto done;
-    }
-    bs->manager_running = TRUE;
-
     if (!build_ui(bs, icon))
     {
         fail(bs, icon, "the interface could not be created");
@@ -649,6 +691,32 @@ int main(void)
     {
         fail(bs, icon, "timer.device is not available");
         goto done;
+    }
+
+    /*
+     * The window opens whether or not there is a radio behind it.
+     *
+     * There are two ordinary reasons the manager will not start -- the machine
+     * has no Bluetooth at all, or something else is already holding
+     * btuart.resource, which claims exclusively -- and in both cases the useful
+     * thing is a window that says so. Taking the application down instead
+     * leaves the user with a program that flashes and vanishes, which reads as
+     * a broken program rather than as a busy or absent radio.
+     */
+    bt_aros_uart_transport_init(bs->uart);
+    bt_aros_manager_task_init(bs->task, &bs->uart->transport, bs->uart,
+                              uart_signal_mask, uart_poll);
+    status = bt_aros_manager_task_start(bs->task);
+    if (status == BT_OK)
+    {
+        bs->manager_running = TRUE;
+    }
+    else
+    {
+        set(bs->scan, MUIA_Disabled, TRUE);
+        set(bs->inquiry, MUIA_Disabled, TRUE);
+        set(bs->status, MUIA_Text_Contents,
+            (IPTR)(MUIX_C "No controller: none fitted, or already in use"));
     }
 
     run(bs);
