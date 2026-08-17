@@ -24,6 +24,12 @@ WB_DISKMAGIC = 0xE310
 WB_DISKVERSION = 1
 WBTOOL = 3
 GADGIMAGE = 0x0004
+# GACT_RELVERIFY. Without it the gadget never reports the button being
+# released, so a double-click is never a selection and the icon sits there
+# doing nothing. Every icon in the distribution sets it -- Calculator and Clock
+# match this generator field for field apart from exactly this one, which is
+# how it was found.
+GACT_RELVERIFY = 0x0001
 
 # Pen 0 is left transparent-ish by being the screen's own background, so the
 # quantiser must never choose it for the character -- it is the "outside".
@@ -91,7 +97,7 @@ def build(src, dst, size=46, stack=16384):
     # struct Gadget, 44 bytes
     out += struct.pack(">I", 0)                       # ga_Next
     out += struct.pack(">hhhh", 0, 0, size, size)     # left, top, width, height
-    out += struct.pack(">HHH", GADGIMAGE, 0, 1)       # flags, activation, type
+    out += struct.pack(">HHH", GADGIMAGE, GACT_RELVERIFY, 1)
     out += struct.pack(">I", 1)                       # ga_GadgetRender != NULL
     out += struct.pack(">I", 0)                       # ga_SelectRender
     out += struct.pack(">I", 0)                       # ga_GadgetText
