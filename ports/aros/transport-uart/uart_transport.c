@@ -227,6 +227,25 @@ static void deliver_packet(enum bt_hci_packet_type type, const uint8_t *data,
 {
     struct bt_aros_uart_transport *uart = user_data;
 
+    /*
+     * Name each reassembled packet, not the raw chunks.
+     *
+     * The chunk trace above shows what the FIFO handed over, which is sliced
+     * by our read buffer and says nothing about framing. This is the boundary
+     * where a whole HCI packet exists, so it is the only place that can tell a
+     * short delivery -- which bt_controller_on_event() drops in silence when
+     * peek(param_len) comes up empty -- from a complete one the parser then
+     * mishandles.
+     */
+    if (uart->pkt_traced < BT_AROS_RX_TRACE_LIMIT)
+    {
+        uart->pkt_traced++;
+        bug("[aros-bluzing:uart] pkt type=%d len=%u: %02x %02x %02x %02x\n",
+            (int)type, (unsigned)length,
+            length > 0 ? data[0] : 0, length > 1 ? data[1] : 0,
+            length > 2 ? data[2] : 0, length > 3 ? data[3] : 0);
+    }
+
     if (uart->receiving && uart->receive != NULL)
         uart->receive(&uart->transport, type, data, length,
                       uart->receive_data);

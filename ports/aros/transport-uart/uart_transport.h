@@ -28,6 +28,7 @@ struct bt_aros_uart_transport
     size_t tx_offset;
     bool opened;
     bool receiving;
+    unsigned pkt_traced; /* reassembled packets logged, see uart_transport.c */
     unsigned rx_traced; /* inbound chunks logged so far, see uart_transport.c */
 };
 
