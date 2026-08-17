@@ -12,9 +12,11 @@ include $(SRCDIR)/config/aros.cfg
 #MM      contrib-aros-bluzing-library \
 #MM      contrib-aros-bluzing-package \
 #MM      contrib-aros-bluzing-selftest \
-#MM      contrib-aros-bluzing-uart-selftest
+#MM      contrib-aros-bluzing-uart-selftest \
+#MM      contrib-aros-bluzing-btscan
 #MM contrib-aros-bluzing-selftest : linklibs-arosbluzing
 #MM contrib-aros-bluzing-uart-selftest : linklibs-arosbluzing
+#MM contrib-aros-bluzing-btscan : linklibs-arosbluzing
 
 BLUZING_ROOT := $(SRCDIR)/$(CURDIR)
 BLUZING_PACKAGE := $(AROS_CONTRIB)/aros-bluzing
@@ -121,5 +123,25 @@ USER_CFLAGS := -Wall -Wextra -Werror -Wno-volatile-register-var
     uselibs=arosbluzing \
     objdir=$(GENDIR)/$(CURDIR)/uart-selftest \
     targetdir=$(BLUZING_PACKAGE)/C
+
+#MM- contrib-aros-bluzing-btscan : contrib-aros-bluzing-btscan-assets
+
+%build_prog mmake=contrib-aros-bluzing-btscan \
+    progname=BTScan \
+    files="$(BLUZING_ROOT)/ports/aros/btscan/main" \
+    uselibs=arosbluzing \
+    objdir=$(GENDIR)/$(CURDIR)/btscan \
+    targetdir=$(BLUZING_PACKAGE)/C
+
+#
+# The banner and the icon land beside the executable so the program can name
+# them through PROGDIR:, which is the only path that stays right wherever the
+# package is installed. They are committed rather than generated here:
+# producing them needs ImageMagick on the build host, and the build host is
+# not required to have it. images/make-assets.sh regenerates them.
+#
+%copy_files_q mmake=contrib-aros-bluzing-btscan-assets \
+    src="$(BLUZING_ROOT)/ports/aros/btscan" \
+    files="BTScan-banner.png BTScan.info" dst="$(BLUZING_PACKAGE)/C"
 
 %common
