@@ -97,6 +97,11 @@ struct bt_discovered_device *bt_device_registry_note_classic(struct bt_device_re
  * pointing, and a combo device sets both. */
 bool bt_cod_is_hid(uint32_t class_of_device);
 
+/* True if this LE address will still name the same device in ten minutes:
+ * public, or static random. Resolvable and non-resolvable private addresses
+ * rotate and cannot be an identity without an IRK from bonding. */
+bool bt_le_addr_is_stable(const struct bt_addr *addr, uint8_t address_type);
+
 /* True if an LE advertising payload announces HID: the HID-over-GATT service
  * UUID 0x1812 in either the complete or the incomplete 16-bit UUID list, or an
  * Appearance whose category is 15 (HID). Writes the appearance out when it is

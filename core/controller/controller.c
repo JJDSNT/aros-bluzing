@@ -89,6 +89,43 @@ void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, siz
         while (bt_hci_inquiry_result_iter_next(&it, &entry) == BT_OK)
             bt_device_registry_note_classic(&ctrl->devices, &entry.bd_addr, entry.class_of_device);
     }
+    else if (hdr.event_code == BT_HCI_EVENT_EXTENDED_INQUIRY_RESULT)
+    {
+        /*
+         * One response, and a layout of its own: address, page-scan repetition
+         * mode, ONE reserved byte where the plain result has two, class of
+         * device, clock offset, RSSI, then 240 bytes of EIR.
+         */
+        struct bt_addr addr;
+        uint32_t cod;
+        int8_t rssi;
+        size_t i;
+
+        if (hdr.param_len < 15u)
+            return;
+        for (i = 0; i < BT_ADDR_LEN; i++)
+            addr.b[i] = params[1u + i];
+        cod = (uint32_t)params[10] | ((uint32_t)params[11] << 8)
+            | ((uint32_t)params[12] << 16);
+        rssi = (int8_t)params[15];
+
+        {
+            struct bt_discovered_device *dev =
+                bt_device_registry_note_classic(&ctrl->devices, &addr, cod);
+            struct bt_le_adv_info info;
+
+            if (dev == NULL)
+                return;
+            dev->last_rssi = rssi;
+            /* The EIR is advertising data in the same length-type-value form,
+             * so the same parser reads the name out of it. */
+            bt_le_adv_parse(params + 16, hdr.param_len - 16u, &info);
+            if (info.hid)
+                dev->flags |= BT_DEVICE_FLAG_HID;
+            if (info.name != NULL)
+                bt_device_set_name(dev, (const char *)info.name, info.name_len, 2);
+        }
+    }
     else if (hdr.event_code == BT_HCI_EVENT_LE_META)
     {
         struct bt_hci_le_adv_report_iter it;
@@ -98,12 +135,34 @@ void bt_controller_on_event(struct bt_controller *ctrl, const uint8_t *data, siz
             return; /* not an advertising-report subevent; nothing to do here */
         while (bt_hci_le_adv_report_iter_next(&it, &report) == BT_OK)
         {
-            struct bt_discovered_device *dev =
-                bt_device_registry_note_le(&ctrl->devices, &report.address,
-                                            report.address_type, report.rssi);
+            struct bt_discovered_device *dev;
             struct bt_le_adv_info info;
 
             bt_le_adv_parse(report.data, report.data_len, &info);
+
+            /*
+             * Do not create an entry for an anonymous rotating address.
+             *
+             * A resolvable private address changes every few minutes, so every
+             * neighbouring phone becomes a parade of devices that are each seen
+             * once and never again -- the registry fills with strangers and the
+             * two devices someone actually owns are lost in it.
+             *
+             * An entry is worth creating when the address is a stable identity
+             * -- public, or static random -- or when the advertisement says who
+             * it is: a name, the HID service, or an appearance. A device that
+             * announces nothing and will not be there next minute is noise.
+             *
+             * An address already known is always updated, so a device that
+             * earns an entry keeps it even when a later advert is bare.
+             */
+            if (bt_device_registry_find(&ctrl->devices, &report.address) == NULL &&
+                !bt_le_addr_is_stable(&report.address, report.address_type) &&
+                info.name == NULL && !info.hid && info.appearance == 0)
+                continue;
+
+            dev = bt_device_registry_note_le(&ctrl->devices, &report.address,
+                                             report.address_type, report.rssi);
             if (dev != NULL)
             {
                 if (info.hid)
@@ -157,6 +216,28 @@ bt_status_t bt_controller_start_classic_inquiry(struct bt_controller *ctrl, uint
 
     if (ctrl->state != BT_CONTROLLER_STATE_READY)
         return BT_ERR_INVALID_ARGUMENT;
+
+    /*
+     * Ask for RSSI and EIR in the results, every time.
+     *
+     * Without this the controller sends the plain Inquiry Result, which has
+     * neither a name nor a signal strength -- an inquiry that returns an
+     * address and a class of device and nothing else. Mode 2 makes it send the
+     * Extended Inquiry Result instead, with the name inline.
+     *
+     * It is also the route that avoids Remote Name Request, which the legacy
+     * port found crashed the BCM43430A1 -- though that was observed on a
+     * controller running unpatched ROM firmware, so it is a reason to prefer
+     * this and not a proof that the command is unusable.
+     */
+    {
+        const uint8_t mode = BT_HCI_INQUIRY_MODE_RSSI_EIR;
+
+        st = bt_cmdq_submit(&ctrl->cmdq, BT_HCI_OPCODE_WRITE_INQUIRY_MODE,
+                             &mode, 1u, 0, ignore_completion, ctrl);
+        if (st != BT_OK)
+            return st;
+    }
 
     bt_buf_writer_init(&w, params, sizeof(params));
     bt_buf_writer_write_le24(&w, BT_HCI_GIAC_LAP);

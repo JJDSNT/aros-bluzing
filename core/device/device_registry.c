@@ -92,6 +92,19 @@ struct bt_discovered_device *bt_device_registry_note_classic(struct bt_device_re
  * both. Nothing else in the peripheral class is an input device we care about,
  * so requiring one of those two bits keeps joysticks and remotes out.
  */
+/*
+ * A public address is an identity by definition. Among random addresses only
+ * the static kind is stable: the top two bits of the most significant byte are
+ * 11 for static random, 01 for resolvable private and 00 for non-resolvable,
+ * and the last two rotate.
+ */
+bool bt_le_addr_is_stable(const struct bt_addr *addr, uint8_t address_type)
+{
+    if (address_type == 0)
+        return true;                    /* public */
+    return (addr->b[BT_ADDR_LEN - 1u] & 0xc0u) == 0xc0u;
+}
+
 bool bt_cod_is_hid(uint32_t class_of_device)
 {
     const uint32_t major = (class_of_device >> 8) & 0x1fu;

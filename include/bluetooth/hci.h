@@ -13,6 +13,13 @@
 #define BT_HCI_OCF_RESET 0x0003u
 #define BT_HCI_OPCODE_RESET BT_HCI_OPCODE(BT_HCI_OGF_CONTROLLER_BASEBAND, BT_HCI_OCF_RESET)
 
+#define BT_HCI_OCF_WRITE_INQUIRY_MODE 0x0045u
+#define BT_HCI_OPCODE_WRITE_INQUIRY_MODE \
+    BT_HCI_OPCODE(BT_HCI_OGF_CONTROLLER_BASEBAND, BT_HCI_OCF_WRITE_INQUIRY_MODE)
+/* Mode 2: results carry RSSI and the Extended Inquiry Response, so a Classic
+ * device's name arrives inline and no separate name request is needed. */
+#define BT_HCI_INQUIRY_MODE_RSSI_EIR 0x02u
+
 #define BT_HCI_OGF_LINK_CONTROL 0x01u
 #define BT_HCI_OCF_INQUIRY 0x0001u
 #define BT_HCI_OPCODE_INQUIRY BT_HCI_OPCODE(BT_HCI_OGF_LINK_CONTROL, BT_HCI_OCF_INQUIRY)
@@ -55,6 +62,10 @@
 #define BT_HCI_EVENT_COMMAND_COMPLETE 0x0Eu
 #define BT_HCI_EVENT_COMMAND_STATUS 0x0Fu
 #define BT_HCI_EVENT_LE_META 0x3Eu
+/* One response, and unlike 0x02 it carries RSSI and the EIR payload. Its
+ * Reserved field is one byte where the plain result has two, so the layouts are
+ * not interchangeable. */
+#define BT_HCI_EVENT_EXTENDED_INQUIRY_RESULT 0x2Fu
 
 #define BT_HCI_LE_META_SUBEVENT_ADVERTISING_REPORT 0x02u
 #define BT_HCI_LE_META_SUBEVENT_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE 0x08u
