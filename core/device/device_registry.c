@@ -1,5 +1,7 @@
 #include <bluetooth/device_registry.h>
 
+#include <string.h>
+
 void bt_device_registry_init(struct bt_device_registry *reg)
 {
     reg->count = 0;
@@ -46,13 +48,17 @@ static struct bt_discovered_device *find_or_create(struct bt_device_registry *re
     if (reg->count >= BT_DEVICE_REGISTRY_MAX)
         return NULL;
 
+    /*
+     * Clear the whole entry rather than naming its fields.
+     *
+     * Naming them meant that adding one to the struct -- appearance, then the
+     * name and its state -- left it holding whatever the slot held before,
+     * which is a bug that only appears once a slot is reused and is invisible
+     * in a fresh registry.
+     */
     dev = &reg->devices[reg->count++];
+    memset(dev, 0, sizeof(*dev));
     dev->addr = *addr;
-    dev->flags = 0;
-    dev->class_of_device = 0;
-    dev->le_address_type = 0;
-    dev->last_rssi = 0;
-    dev->sightings = 0;
     return dev;
 }
 

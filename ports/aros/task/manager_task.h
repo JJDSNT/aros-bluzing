@@ -24,7 +24,7 @@ struct bt_aros_manager_task
     bt_status_t le_scan_status;      /* result of the last requested scan */
     volatile bool inquiry_requested;
     uint8_t inquiry_length;          /* units of 1.28 s, as HCI takes it */
-    bt_status_t inquiry_status;
+    bt_status_t inquiry_status;   /* BT_ERR_* until the manager has run it */
 };
 
 void bt_aros_manager_task_init(

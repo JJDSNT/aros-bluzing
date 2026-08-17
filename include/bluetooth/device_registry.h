@@ -61,10 +61,20 @@ struct bt_discovered_device
 #endif
 
 
+/*
+ * count before devices[], deliberately.
+ *
+ * With the array first, count sits immediately after it, and any write that
+ * strides through the array with the wrong element size lands on the count --
+ * which reads afterwards as an empty registry rather than as corruption. That
+ * is not hypothetical: it is what a partial rebuild produced after
+ * bt_discovered_device grew, and "the scan listed devices and then reported
+ * none" is a much harder symptom to place than a bad entry would have been.
+ */
 struct bt_device_registry
 {
-    struct bt_discovered_device devices[BT_DEVICE_REGISTRY_MAX];
     size_t count;
+    struct bt_discovered_device devices[BT_DEVICE_REGISTRY_MAX];
 };
 
 void bt_device_registry_init(struct bt_device_registry *reg);

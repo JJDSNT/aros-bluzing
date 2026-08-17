@@ -202,7 +202,7 @@ void bt_aros_manager_task_request_le_scan(struct bt_aros_manager_task *task)
     if (task == NULL || task->task == NULL)
         return;
     Forbid();
-    task->le_scan_status = BT_OK;
+    task->le_scan_status = BT_ERR_INVALID_ARGUMENT;  /* see request_inquiry */
     task->le_scan_requested = true;
     Permit();
     Signal(task->task, SIGBREAKF_CTRL_F);
@@ -214,7 +214,10 @@ void bt_aros_manager_task_request_inquiry(struct bt_aros_manager_task *task,
     if (task == NULL || task->task == NULL)
         return;
     Forbid();
-    task->inquiry_status = BT_OK;
+    /* Not BT_OK: the caller reads this back to learn whether the inquiry
+     * started, and pre-setting success made the answer meaningless -- it read
+     * as started whether or not the manager had reached the request. */
+    task->inquiry_status = BT_ERR_INVALID_ARGUMENT;
     task->inquiry_length = length;
     task->inquiry_requested = true;
     Permit();
