@@ -1,5 +1,13 @@
 # aros-bluzing
 
+> [!IMPORTANT]
+> This standalone repository is deprecated and is no longer the maintained
+> integration point for Bluzing. The project has been incorporated into the
+> main [AROS source tree](https://github.com/aros-development-team/AROS/tree/master/rom/bluetooth),
+> where current development and fixes take place. New users and contributors
+> should use the version shipped with AROS. This repository remains available
+> as a historical reference.
+
 A native, portable Bluetooth Host stack for [AROS](https://www.aros.org/), the open-source
 AmigaOS-compatible operating system.
 
